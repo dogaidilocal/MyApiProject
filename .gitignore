@@ -1,0 +1,23 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.ide
+*.dbmdl
+*.jfm
+**/Properties/launchSettings.json
+
+# Node/React
+node_modules/
+npm-debug.log*
+yarn-error.log*
+dist/
+build/
+
+# Genel
+.env
+*.log
+.DS_Store
+Thumbs.db
