@@ -20,6 +20,8 @@ public class ProjectsWithTasksController : ControllerBase
         var projects = await _context.Projects
             .Include(p => p.Department)
             .Include(p => p.Tasks)
+                .ThenInclude(t => t.Todos) 
+                .Include(p => p.Tasks)
                 .ThenInclude(t => t.AssignedEmployees)
                     .ThenInclude(a => a.Employee)
             .ThenInclude(e => e.Department) // moved one indent to avoid EF confusion

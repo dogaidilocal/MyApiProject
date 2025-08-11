@@ -30,6 +30,7 @@ namespace MyApiProject.Controllers
         public async Task<ActionResult<TaskDto>> GetTask(int id)
         {
             var task = await _context.Tasks
+                .Include(t => t.Todos)                // To-do’ları dahil ettik
                 .Include(t => t.AssignedEmployees)
                 .FirstOrDefaultAsync(t => t.TaskID == id);
 
@@ -45,7 +46,17 @@ namespace MyApiProject.Controllers
                 Completion_rate = task.Completion_rate,
                 Task_number = task.Task_number,
                 Pnumber = task.Pnumber,
-                Todos = new List<TodoDto>(),
+
+                Todos = task.Todos
+                    .OrderBy(td => td.TodoIndex)
+                    .Select(td => new TodoDto
+                    {
+                        TodoIndex = td.TodoIndex,
+                        Description = td.Description,
+                        IsCompleted = td.IsCompleted
+                    })
+                    .ToList(),
+
                 Assignments = task.AssignedEmployees
                     .GroupBy(a => a.TodoIndex)
                     .OrderBy(g => g.Key)
@@ -67,48 +78,64 @@ namespace MyApiProject.Controllers
 
         [HttpPut("{id}")]
         [Authorize(Policy = "AdminOnly")]
-        public async Task<IActionResult> UpdateTask(int id, ProjectTask task)
+        public async Task<IActionResult> UpdateTask(int id, TaskDto dto)
         {
-            if (id != task.TaskID)
+            if (id != dto.TaskID)
                 return BadRequest("Task ID uyuşmuyor");
 
             var existingTask = await _context.Tasks
+                .Include(t => t.Todos)
                 .Include(t => t.AssignedEmployees)
                 .FirstOrDefaultAsync(t => t.TaskID == id);
 
             if (existingTask == null)
                 return NotFound("Task bulunamadı.");
 
-            _context.AssignedTos.RemoveRange(existingTask.AssignedEmployees);
+            // Temel alanlar
+            existingTask.TaskName = dto.TaskName;
+            existingTask.Start_date = dto.Start_date;
+            existingTask.Due_date = dto.Due_date;
+            existingTask.Completion_rate = dto.Completion_rate;
+            existingTask.Task_number = dto.Task_number;
+            existingTask.Pnumber = dto.Pnumber;
 
-            if (task.Assignments != null)
+            // To-do’ları sıfırla ve yeniden ekle
+            _context.TaskTodos.RemoveRange(existingTask.Todos);
+            if (dto.Todos != null)
             {
-                for (int todoIndex = 0; todoIndex < task.Assignments.Count; todoIndex++)
+                foreach (var td in dto.Todos)
                 {
-                    var employeeList = task.Assignments[todoIndex];
-                    if (employeeList == null) continue;
-
-                    foreach (var employeeId in employeeList)
+                    _context.TaskTodos.Add(new TaskTodo
                     {
-                        var assignment = new AssignedTo
-                        {
-                            TaskID = task.TaskID,
-                            SSN = employeeId.ToString(),
-                            TodoIndex = todoIndex
-                        };
-                        _context.AssignedTos.Add(assignment);
-                    }
+                        TaskID = existingTask.TaskID,
+                        TodoIndex = td.TodoIndex,
+                        Description = td.Description,
+                        Importance = null, // istersen dto’ya ekle
+                        IsCompleted = td.IsCompleted
+                    });
                 }
             }
 
-            existingTask.TaskName = task.TaskName;
-            existingTask.Start_date = task.Start_date;
-            existingTask.Due_date = task.Due_date;
-            existingTask.Completion_rate = task.Completion_rate;
-            existingTask.Task_number = task.Task_number;
-            existingTask.Pnumber = task.Pnumber;
+            // Assigned_To’yu sıfırla ve yeniden ekle
+            _context.AssignedTos.RemoveRange(existingTask.AssignedEmployees);
+            if (dto.Assignments != null)
+            {
+                for (int i = 0; i < dto.Assignments.Count; i++)
+                {
+                    var employeeList = dto.Assignments[i];
+                    if (employeeList == null) continue;
 
-            _context.Entry(existingTask).State = EntityState.Modified;
+                    foreach (var ssn in employeeList)
+                    {
+                        _context.AssignedTos.Add(new AssignedTo
+                        {
+                            TaskID = existingTask.TaskID,
+                            SSN = ssn,
+                            TodoIndex = i
+                        });
+                    }
+                }
+            }
 
             try
             {
@@ -123,8 +150,7 @@ namespace MyApiProject.Controllers
             }
 
             await UpdateProjectCompletion(existingTask.Pnumber ?? 0);
-
-            return Ok(existingTask);
+            return Ok(dto);
         }
 
         [HttpDelete("{id}")]

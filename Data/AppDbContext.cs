@@ -20,6 +20,7 @@ namespace MyApiProject.Data
         public DbSet<TaskCompletionLog> TaskCompletionLogs { get; set; }
         public DbSet<AssignmentLog> AssignmentLogs { get; set; }
         public DbSet<User> Users { get; set; }
+        public DbSet<TaskTodo> TaskTodos { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -68,6 +69,18 @@ namespace MyApiProject.Data
                 .WithMany(p => p.Tasks)
                 .HasForeignKey(t => t.Pnumber)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<TaskTodo>()
+                .HasKey(t => new { t.TaskID, t.TodoIndex });
+
+            modelBuilder.Entity<TaskTodo>()
+                .HasOne(t => t.Task)
+                .WithMany(x => x.Todos)
+                .HasForeignKey(t => t.TaskID)
+                .HasPrincipalKey(x => x.TaskID)
+                .OnDelete(DeleteBehavior.Cascade);
+
+
         }
     }
 }

@@ -30,5 +30,10 @@ namespace MyApiProject.Models
 
         [NotMapped]
         public List<List<int>> Assignments { get; set; } = new();
+
+        public ICollection<TaskTodo> Todos { get; set; } = new List<TaskTodo>();
+
+        
+
     }
 }
