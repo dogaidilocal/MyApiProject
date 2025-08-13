@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
   const [showForm, setShowForm] = useState(false);
@@ -11,11 +11,56 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
     dnumber: ""
   });
 
+  // ── Lider ata bloğu için state ───────────────────────────────────────────────
+  const [employees, setEmployees] = useState([]);
+  const [empQuery, setEmpQuery] = useState("");
+  const [selectedEmp, setSelectedEmp] = useState(null);
+
+  // Form açıldığında çalışanları bir kere çek
+  useEffect(() => {
+    if (!showForm) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    fetch(`${process.env.REACT_APP_API_URL}/api/Employees`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(setEmployees)
+      .catch(console.error);
+  }, [showForm]);
+
+  const filteredEmployees = useMemo(() => {
+    const q = (empQuery || "").toLowerCase();
+    return employees
+      .filter(e =>
+        (e.fname?.toLowerCase().includes(q) || false) ||
+        (e.lname?.toLowerCase().includes(q) || false) ||
+        (e.ssn?.toLowerCase().includes(q) || false) ||
+        (e.SSN?.toLowerCase().includes(q) || false)
+      )
+      .slice(0, 12);
+  }, [employees, empQuery]);
+
+  const employeeId = emp => emp.ssn ?? emp.SSN ?? "";
+  const employeeLabel = emp =>
+    `${emp.fname ?? ""} ${emp.lname ?? ""}`.trim() +
+    (employeeId(emp) ? ` — ${employeeId(emp)}` : "");
+
+  // ── form helpers ────────────────────────────────────────────────────────────
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const toUTC = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString(); // UTC
+  };
+
+  // ── submit ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -25,25 +70,18 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
       return;
     }
 
-   const toUTC = (dateStr) => {
-  const d = new Date(dateStr);
-  // UTC zaman dilimini al
-  return d.toISOString(); 
-};
-
-
     const payload = {
-  pnumber: parseInt(form.pnumber),
-  pname: form.pname,
-  start_date: toUTC(form.start_date),
-  due_date: toUTC(form.due_date),
-  completion_status: parseInt(form.completion_status),
-  dnumber: parseInt(form.dnumber), // sadece ID, obje değil ❗
-  tasks: []
-};
-
+      pnumber: parseInt(form.pnumber),
+      pname: form.pname,
+      start_date: toUTC(form.start_date),
+      due_date: toUTC(form.due_date),
+      completion_status: parseInt(form.completion_status),
+      dnumber: parseInt(form.dnumber),
+      tasks: []
+    };
 
     try {
+      // 1) Projeyi oluştur
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/Projects`, {
         method: "POST",
         headers: {
@@ -59,8 +97,37 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
         return;
       }
 
-      const yeni = await response.json();
-      onAdd(yeni);
+      const created = await response.json();
+
+      // 2) Lider seçildiyse bu proje için lider ata
+      if (selectedEmp) {
+        const leaderBody = {
+          leaderSSN: employeeId(selectedEmp),
+          usernameForUserTable: null // kullanıcı tablosu eşleşmesi yoksa null bırakalım
+        };
+
+        const assignRes = await fetch(
+          `${process.env.REACT_APP_API_URL}/api/ProjectLeaders/project/${created.pnumber}/assign`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify(leaderBody)
+          }
+        );
+
+        if (!assignRes.ok) {
+          // Proje oluşturuldu; lider atanamadı ise kullanıcıya bilgi verelim
+          const t = await assignRes.text();
+          console.warn("Lider atama başarısız:", t);
+          alert("Proje oluşturuldu fakat lider atanamadı.");
+        }
+      }
+
+      // 3) UI state’lerini temizle & üst komponenti bilgilendir
+      onAdd(created);
       setShowForm(false);
       setForm({
         pname: "",
@@ -70,11 +137,15 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
         completion_status: "",
         dnumber: ""
       });
+      setSelectedEmp(null);
+      setEmpQuery("");
+
     } catch (err) {
       alert("Bir hata oluştu: " + err.message);
     }
   };
 
+  // ── render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ flex: 1 }}>
       <h2>Proje Listesi</h2>
@@ -88,7 +159,8 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
             border: "1px solid #ccc",
             padding: "1rem",
             marginTop: "1rem",
-            background: "#f7f7f7"
+            background: "#f7f7f7",
+            borderRadius: 8
           }}
         >
           <h4>Yeni Proje Bilgileri</h4>
@@ -138,10 +210,53 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
               onChange={handleChange}
               required
             /><br />
-            <button type="submit">Ekle</button>
-            <button type="button" onClick={() => setShowForm(false)} style={{ marginLeft: "0.5rem" }}>
-              İptal
-            </button>
+
+            {/* ── Lider Ata Bloğu ───────────────────────────────────────── */}
+            <div style={{ marginTop: "1rem", paddingTop: ".75rem", borderTop: "1px solid #ddd" }}>
+              <strong>Proje Lideri Ata (opsiyonel)</strong>
+              <div style={{ marginTop: ".5rem" }}>
+                <input
+                  placeholder="İsim / Soyisim / SSN ara…"
+                  value={empQuery}
+                  onChange={(e) => setEmpQuery(e.target.value)}
+                  style={{ width: 320 }}
+                />
+              </div>
+              <div style={{ maxHeight: 180, overflow: "auto", marginTop: ".5rem" }}>
+                {filteredEmployees.map(emp => {
+                  const id = employeeId(emp);
+                  return (
+                    <label key={id} style={{ display: "block", cursor: "pointer" }}>
+                      <input
+                        type="radio"
+                        name="leaderPick"
+                        checked={selectedEmp ? employeeId(selectedEmp) === id : false}
+                        onChange={() => setSelectedEmp(emp)}
+                      />{" "}
+                      {employeeLabel(emp)}
+                    </label>
+                  );
+                })}
+                {filteredEmployees.length === 0 && (
+                  <div style={{ opacity: .7 }}>Sonuç yok</div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginTop: ".75rem" }}>
+              <button type="submit">Ekle</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setSelectedEmp(null);
+                  setEmpQuery("");
+                }}
+                style={{ marginLeft: "0.5rem" }}
+              >
+                İptal
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -160,7 +275,17 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
               cursor: "pointer"
             }}
           >
-            {p.pname || "Proje İsimsiz"} (ID: {p.pnumber})
+            <div>
+              <strong>{p.pname || "Proje İsimsiz"}</strong> (ID: {p.pnumber})
+              {p.leader && (
+                <span style={{ marginLeft: 8, opacity: 0.85 }}>
+                  • Lider: {p.leader.fullName ?? p.leader.leaderID}
+                </span>
+              )}
+            </div>
+            <div style={{ marginTop: 4, opacity: .75 }}>
+              Tamamlanma: %{p.completion_status ?? 0}
+            </div>
           </div>
         ))}
       </div>

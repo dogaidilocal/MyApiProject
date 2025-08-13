@@ -8,34 +8,32 @@ using MyApiProject.Models.Dto;
 namespace MyApiProject.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/Tasks")]
+    [Produces("application/json")]
     public class TasksController : ControllerBase
     {
         private readonly AppDbContext _context;
+        public TasksController(AppDbContext context) => _context = context;
 
-        public TasksController(AppDbContext context)
-        {
-            _context = context;
-        }
+        [HttpGet("hello")]
+        [AllowAnonymous]
+        public IActionResult Hello() => Ok("Tasks alive");
 
         [HttpGet]
         [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<ProjectTask>>> GetTasks()
-        {
-            return await _context.Tasks.ToListAsync();
-        }
+            => await _context.Tasks.ToListAsync();
 
         [HttpGet("{id}")]
         [AllowAnonymous]
         public async Task<ActionResult<TaskDto>> GetTask(int id)
         {
             var task = await _context.Tasks
-                .Include(t => t.Todos)                // To-do’ları dahil ettik
+                .Include(t => t.Todos)
                 .Include(t => t.AssignedEmployees)
                 .FirstOrDefaultAsync(t => t.TaskID == id);
 
-            if (task == null)
-                return NotFound();
+            if (task == null) return NotFound();
 
             var dto = new TaskDto
             {
@@ -46,17 +44,16 @@ namespace MyApiProject.Controllers
                 Completion_rate = task.Completion_rate,
                 Task_number = task.Task_number,
                 Pnumber = task.Pnumber,
-
                 Todos = task.Todos
                     .OrderBy(td => td.TodoIndex)
                     .Select(td => new TodoDto
                     {
                         TodoIndex = td.TodoIndex,
                         Description = td.Description,
+                        Importance = td.Importance,
                         IsCompleted = td.IsCompleted
                     })
                     .ToList(),
-
                 Assignments = task.AssignedEmployees
                     .GroupBy(a => a.TodoIndex)
                     .OrderBy(g => g.Key)
@@ -80,56 +77,58 @@ namespace MyApiProject.Controllers
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> UpdateTask(int id, TaskDto dto)
         {
-            if (id != dto.TaskID)
-                return BadRequest("Task ID uyuşmuyor");
+            if (id != dto.TaskID) return BadRequest("Task ID uyuşmuyor");
 
-            var existingTask = await _context.Tasks
+            var existing = await _context.Tasks
                 .Include(t => t.Todos)
                 .Include(t => t.AssignedEmployees)
                 .FirstOrDefaultAsync(t => t.TaskID == id);
 
-            if (existingTask == null)
-                return NotFound("Task bulunamadı.");
+            if (existing == null) return NotFound("Task bulunamadı.");
 
-            // Temel alanlar
-            existingTask.TaskName = dto.TaskName;
-            existingTask.Start_date = dto.Start_date;
-            existingTask.Due_date = dto.Due_date;
-            existingTask.Completion_rate = dto.Completion_rate;
-            existingTask.Task_number = dto.Task_number;
-            existingTask.Pnumber = dto.Pnumber;
+            // temel alanlar
+            existing.TaskName = dto.TaskName;
+            existing.Start_date = dto.Start_date?.ToUniversalTime();
+            existing.Due_date   = dto.Due_date?.ToUniversalTime();
+            existing.Completion_rate = dto.Completion_rate;
+            existing.Task_number = dto.Task_number;
+            existing.Pnumber = dto.Pnumber;
 
-            // To-do’ları sıfırla ve yeniden ekle
-            _context.TaskTodos.RemoveRange(existingTask.Todos);
+            // 1) mevcutları sil → kaydet
+            _context.TaskTodos.RemoveRange(existing.Todos);
+            _context.AssignedTos.RemoveRange(existing.AssignedEmployees);
+            await _context.SaveChangesAsync();
+
+            // 2) tracking’i temizle (already being tracked hatasını önler)
+            _context.ChangeTracker.Clear();
+
+            // 3) to-do’ları yeniden ekle
             if (dto.Todos != null)
             {
-                foreach (var td in dto.Todos)
+                var toAddTodos = dto.Todos.Select(td => new TaskTodo
                 {
-                    _context.TaskTodos.Add(new TaskTodo
-                    {
-                        TaskID = existingTask.TaskID,
-                        TodoIndex = td.TodoIndex,
-                        Description = td.Description,
-                        Importance = null, // istersen dto’ya ekle
-                        IsCompleted = td.IsCompleted
-                    });
-                }
+                    TaskID = dto.TaskID,
+                    TodoIndex = td.TodoIndex,
+                    Description = td.Description ?? "",
+                    Importance = td.Importance,
+                    IsCompleted = td.IsCompleted
+                });
+                await _context.TaskTodos.AddRangeAsync(toAddTodos);
             }
 
-            // Assigned_To’yu sıfırla ve yeniden ekle
-            _context.AssignedTos.RemoveRange(existingTask.AssignedEmployees);
+            // 4) atamaları yeniden ekle
             if (dto.Assignments != null)
             {
                 for (int i = 0; i < dto.Assignments.Count; i++)
                 {
-                    var employeeList = dto.Assignments[i];
-                    if (employeeList == null) continue;
+                    var list = dto.Assignments[i];
+                    if (list == null) continue;
 
-                    foreach (var ssn in employeeList)
+                    foreach (var ssn in list.Where(s => !string.IsNullOrWhiteSpace(s)))
                     {
-                        _context.AssignedTos.Add(new AssignedTo
+                        await _context.AssignedTos.AddAsync(new AssignedTo
                         {
-                            TaskID = existingTask.TaskID,
+                            TaskID = dto.TaskID,
                             SSN = ssn,
                             TodoIndex = i
                         });
@@ -137,19 +136,11 @@ namespace MyApiProject.Controllers
                 }
             }
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!TaskExists(id))
-                    return NotFound();
-                else
-                    throw;
-            }
+            // 5) task’ı modified işaretleyip kaydet
+            _context.Entry(existing).State = EntityState.Modified;
 
-            await UpdateProjectCompletion(existingTask.Pnumber ?? 0);
+            await _context.SaveChangesAsync();
+
             return Ok(dto);
         }
 
@@ -158,32 +149,11 @@ namespace MyApiProject.Controllers
         public async Task<IActionResult> DeleteTask(int id)
         {
             var task = await _context.Tasks.FindAsync(id);
-            if (task == null)
-                return NotFound();
+            if (task == null) return NotFound();
 
             _context.Tasks.Remove(task);
             await _context.SaveChangesAsync();
             return NoContent();
-        }
-
-        private bool TaskExists(int id)
-        {
-            return _context.Tasks.Any(e => e.TaskID == id);
-        }
-
-        private async Task UpdateProjectCompletion(int projectId)
-        {
-            var project = await _context.Projects
-                .Include(p => p.Tasks)
-                .FirstOrDefaultAsync(p => p.Pnumber == projectId);
-
-            if (project != null && project.Tasks.Any())
-            {
-                var avg = (int)Math.Round(project.Tasks.Average(t => (decimal)(t.Completion_rate ?? 0)));
-                project.Completion_status = avg;
-                _context.Entry(project).State = EntityState.Modified;
-                await _context.SaveChangesAsync();
-            }
         }
     }
 }

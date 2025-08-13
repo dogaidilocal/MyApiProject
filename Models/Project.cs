@@ -1,7 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using MyApiProject.Models;
 
 namespace MyApiProject.Models
 {
@@ -20,10 +20,10 @@ namespace MyApiProject.Models
         [ForeignKey("Dnumber")]
         public Department? Department { get; set; }
 
-
-
+        // ⬇️ EKLENDİ
         public ICollection<ProjectTask> Tasks { get; set; } = new List<ProjectTask>();
 
+        // ⬇️ YENİ: bu ilişkiyi ekleyelim ki Include ile çekebilelim
+        public ICollection<ProjectLeader> ProjectLeaders { get; set; } = new List<ProjectLeader>();
     }
 }
-

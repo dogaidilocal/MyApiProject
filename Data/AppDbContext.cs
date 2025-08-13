@@ -80,6 +80,27 @@ namespace MyApiProject.Data
                 .HasPrincipalKey(x => x.TaskID)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<ProjectTask>(e =>
+           {
+               e.ToTable("Task");           // Postgres’teki "Task" tablosu
+               e.HasKey(t => t.TaskID);
+           });
+
+           
+modelBuilder.Entity<TaskTodo>(e =>
+{
+    e.ToTable("Task_Todo");
+    e.HasKey(x => new { x.TaskID, x.TodoIndex });
+});
+
+modelBuilder.Entity<AssignedTo>(e =>
+{
+    e.ToTable("Assigned_To");
+    e.HasKey(a => a.Id); // tekil Id kolonunu PK yaptık
+});
+
+
+
 
         }
     }

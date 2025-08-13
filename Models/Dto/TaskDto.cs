@@ -1,10 +1,11 @@
-using MyApiProject.Models; 
+using MyApiProject.Models;
+
 namespace MyApiProject.Models.Dto
 {
     public class TaskDto
     {
         public int TaskID { get; set; }
-        public string TaskName { get; set; }
+        public string TaskName { get; set; } = string.Empty;
         public DateTime? Start_date { get; set; }
         public DateTime? Due_date { get; set; }
         public int? Completion_rate { get; set; }
@@ -19,8 +20,7 @@ namespace MyApiProject.Models.Dto
     {
         public int TodoIndex { get; set; }
         public string? Description { get; set; }
+        public int? Importance { get; set; }
         public bool IsCompleted { get; set; }
     }
-
-
 }
