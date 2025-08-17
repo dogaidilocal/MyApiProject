@@ -7,6 +7,9 @@ function LoginPage({ setToken }) {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+  // .env'den al, fallback localhost:5000
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -16,7 +19,7 @@ function LoginPage({ setToken }) {
     }
 
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/Auth/login`, {
+      const response = await fetch(`${API_URL}/api/Auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -28,10 +31,15 @@ function LoginPage({ setToken }) {
       }
 
       const data = await response.json();
-      setToken(data.token); // sadece bu satır yeterli
+      setToken(data.token);
+
+      // Token'ı localStorage'a kaydet
+      localStorage.setItem("token", data.token);
+
       navigate("/dashboard");
     } catch (err) {
-      setError("Giriş sırasında hata oluştu.");
+      console.error("Login error:", err);
+      setError("Giriş sırasında hata oluştu. Lütfen tekrar deneyin.");
     }
   };
 

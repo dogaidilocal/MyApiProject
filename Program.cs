@@ -28,7 +28,6 @@ namespace MyApiProject
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyApiProject", Version = "v1" });
 
-                // Çakışan method+path olursa ilkini al (Swagger patlamasın)
                 c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
 
                 c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -61,11 +60,11 @@ Example: 'Bearer eyJhb...'",
                 });
             });
 
-            // Database
+            // Database bağlantısı
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            // Auth
+            // Auth (JWT)
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -82,7 +81,7 @@ Example: 'Bearer eyJhb...'",
                     ValidIssuer = builder.Configuration["Jwt:Issuer"],
                     ValidAudience = builder.Configuration["Jwt:Audience"],
                     IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is missing")))
                 };
             });
 
@@ -92,11 +91,15 @@ Example: 'Bearer eyJhb...'",
                 options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
             });
 
-            // CORS (geliştirme için açık)
+            // CORS (React dev ortamına özel izin)
             builder.Services.AddCors(options =>
             {
-                options.AddDefaultPolicy(policy =>
-                    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
+                options.AddPolicy("AllowFrontend", policy =>
+                {
+                    policy.WithOrigins("http://localhost:3000") // React dev server
+                          .AllowAnyHeader()
+                          .AllowAnyMethod();
+                });
             });
 
             var app = builder.Build();
@@ -112,7 +115,7 @@ Example: 'Bearer eyJhb...'",
             app.UseSwaggerUI();
 
             // CORS
-            app.UseCors();
+            app.UseCors("AllowFrontend");
 
             // AuthZ pipeline
             app.UseAuthentication();

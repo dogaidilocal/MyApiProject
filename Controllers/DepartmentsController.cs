@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyApiProject.Data;
 using MyApiProject.Models;
-using Microsoft.AspNetCore.Authorization; // Authorize için gerekli
+using Microsoft.AspNetCore.Authorization;
 
 namespace MyApiProject.Controllers
 {
@@ -20,6 +20,7 @@ namespace MyApiProject.Controllers
         // GET: api/departments
         [HttpGet]
         [AllowAnonymous]
+        [Produces("application/json")]
         public async Task<ActionResult<IEnumerable<Department>>> GetDepartments()
         {
             return await _context.Departments.ToListAsync();
@@ -28,6 +29,7 @@ namespace MyApiProject.Controllers
         // GET: api/departments/5
         [HttpGet("{id}")]
         [AllowAnonymous]
+        [Produces("application/json")]
         public async Task<ActionResult<Department>> GetDepartment(int id)
         {
             var department = await _context.Departments.FindAsync(id);
@@ -35,13 +37,13 @@ namespace MyApiProject.Controllers
             {
                 return NotFound();
             }
-            
             return department;
         }
 
         // POST: api/departments
         [HttpPost]
         [Authorize(Policy = "AdminOnly")]
+        [Produces("application/json")]
         public async Task<ActionResult<Department>> CreateDepartment(Department department)
         {
             _context.Departments.Add(department);
@@ -52,6 +54,7 @@ namespace MyApiProject.Controllers
         // PUT: api/departments/5
         [HttpPut("{id}")]
         [Authorize(Policy = "AdminOnly")]
+        [Produces("application/json")]
         public async Task<IActionResult> UpdateDepartment(int id, Department department)
         {
             if (id != department.Dnumber)
