@@ -27,14 +27,21 @@ function LoginPage({ setToken }) {
 
       if (!response.ok) {
         const errText = await response.text();
-        return setError(`Hata: ${errText}`);
+        return setError(`Hata: ${errText || response.status}`);
       }
 
-      const data = await response.json();
-      setToken(data.token);
+      const data = await response.json(); // beklenen: { token } (+ opsiyonel role,name)
+      if (!data?.token) {
+        return setError("Sunucudan beklenen 'token' alanı gelmedi.");
+      }
 
-      // Token'ı localStorage'a kaydet
+      // Uygulama state + localStorage
+      setToken(data.token);
       localStorage.setItem("token", data.token);
+
+      // Eğer backend role/nickname vs gönderiyorsa:
+      // if (data.role) localStorage.setItem("role", String(data.role));
+      // if (data.name) localStorage.setItem("name", String(data.name));
 
       navigate("/dashboard");
     } catch (err) {
@@ -44,7 +51,7 @@ function LoginPage({ setToken }) {
   };
 
   return (
-    <div style={{ maxWidth: "300px", margin: "100px auto", textAlign: "center" }}>
+    <div style={{ maxWidth: "320px", margin: "100px auto", textAlign: "center" }}>
       <h2>🔐 Giriş Yap</h2>
       <form onSubmit={handleLogin}>
         <input

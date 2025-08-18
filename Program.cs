@@ -11,7 +11,7 @@ namespace MyApiProject
     {
         public static void Main(string[] args)
         {
-            // Npgsql timestamp davranışları
+            // Npgsql zaman damgası davranışları
             AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
             AppContext.SetSwitch("Npgsql.DisableDateTimeInfinityConversions", true);
 
@@ -22,19 +22,16 @@ namespace MyApiProject
                 x.JsonSerializerOptions.ReferenceHandler =
                     System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles);
 
-            // Swagger + JWT
+            // Swagger + JWT şeması
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyApiProject", Version = "v1" });
-
                 c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
 
                 c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
-                    Description = @"JWT Authorization header using the Bearer scheme.
-Enter 'Bearer' [space] and then your token.
-Example: 'Bearer eyJhb...'",
+                    Description = "JWT Authorization header using the Bearer scheme. Example: 'Bearer eyJhb...'",
                     Name = "Authorization",
                     In = ParameterLocation.Header,
                     Type = SecuritySchemeType.ApiKey,
@@ -46,11 +43,7 @@ Example: 'Bearer eyJhb...'",
                     {
                         new OpenApiSecurityScheme
                         {
-                            Reference = new OpenApiReference
-                            {
-                                Type = ReferenceType.SecurityScheme,
-                                Id = "Bearer"
-                            },
+                            Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" },
                             Scheme = "oauth2",
                             Name = "Bearer",
                             In = ParameterLocation.Header
@@ -60,11 +53,11 @@ Example: 'Bearer eyJhb...'",
                 });
             });
 
-            // Database bağlantısı
+            // Db
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            // Auth (JWT)
+            // Auth
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -81,50 +74,63 @@ Example: 'Bearer eyJhb...'",
                     ValidIssuer = builder.Configuration["Jwt:Issuer"],
                     ValidAudience = builder.Configuration["Jwt:Audience"],
                     IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is missing")))
+                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
                 };
             });
 
-            // Authorization
-            builder.Services.AddAuthorization(options =>
-            {
-                options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
-            });
+            builder.Services.AddAuthorization();
 
-            // CORS (React dev ortamına özel izin)
+            // CORS: sadece frontend origin’leri
+            var allowedOrigins = new[]
+            {
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "https://localhost:3000",
+                "https://127.0.0.1:3000",
+                "http://192.168.1.106:3000" // yerel ağdan erişim gerekiyorsa
+            };
+
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AllowFrontend", policy =>
-                {
-                    policy.WithOrigins("http://localhost:3000") // React dev server
-                          .AllowAnyHeader()
-                          .AllowAnyMethod();
-                });
+                    policy.WithOrigins(allowedOrigins)
+                          .AllowAnyHeader()      // Authorization dahil
+                          .AllowAnyMethod());    // GET/POST/PUT/DELETE...
             });
 
             var app = builder.Build();
 
-            // Dev ortamında detaylı hata sayfası
+            // ── CORS shim: Dev istisna sayfası 500 döndürse bile CORS başlığını ekle ──
+            app.Use(async (ctx, next) =>
+            {
+                if (ctx.Request.Headers.TryGetValue("Origin", out var origin) &&
+                    allowedOrigins.Contains(origin))
+                {
+                    ctx.Response.Headers["Access-Control-Allow-Origin"] = origin;
+                    ctx.Response.Headers["Vary"] = "Origin";
+                }
+                await next();
+            });
+
             if (app.Environment.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
             }
 
-            // Swagger
+            // Swagger (/swagger)
             app.UseSwagger();
             app.UseSwaggerUI();
 
-            // CORS
-            app.UseCors("AllowFrontend");
+            app.UseRouting();
 
-            // AuthZ pipeline
+            // CORS → Auth sırası önemli
+            app.UseCors("AllowFrontend");
             app.UseAuthentication();
             app.UseAuthorization();
 
-            // Controllers
             app.MapControllers();
 
-            // Root → Swagger
+            // Opsiyonel: kökten Swagger'a yönlendir
             app.MapGet("/", ctx =>
             {
                 ctx.Response.Redirect("/swagger");

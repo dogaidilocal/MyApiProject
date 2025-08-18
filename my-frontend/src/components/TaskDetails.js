@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 function TaskDetails({ task, isAdmin, token, onUpdate }) {
-  // ---- helpers: task alanlarını normalize et (API farklı casing ile gelebilir) ----
+  // ---- API URL (env + fallback) ----
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+  // ---- helpers: task alanlarını normalize et ----
   const norm = {
     id: task.TaskID ?? task.taskID,
     name: task.TaskName ?? task.taskName,
@@ -10,11 +13,8 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
     completion: task.Completion_rate ?? task.completion_rate ?? 0,
     taskNumber: task.Task_number ?? task.task_number ?? null,
     pnumber: task.Pnumber ?? task.pnumber ?? null,
-    incomingTodos:
-      task.Todos ??
-      task.todos ??
-      [], // server’dan PascalCase ya da camel gelebilir
-    incomingAssignments: task.Assignments ?? task.assignments ?? [],
+    incomingTodos: task.Todos ?? task.todos ?? [],
+    incomingAssignments: task.AssignedEmployees ?? task.Assignees ?? task.Assignments ?? [],
   };
 
   // ---- state ----
@@ -23,43 +23,80 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
     (norm.incomingTodos || []).map((t, i) => ({
       TodoIndex: t.TodoIndex ?? i,
       Description: t.Description ?? t.description ?? "",
-      Importance:
-        t.Importance ?? t.importance ?? 0, // önem yüzdesi
+      Importance: Number(t.Importance ?? t.importance ?? 0),
       IsCompleted: !!(t.IsCompleted ?? t.isCompleted ?? t.done),
     }))
   );
 
-  const [employees, setEmployees] = useState([]);
-  const [employeeSelections, setEmployeeSelections] = useState(
-    () => norm.incomingAssignments || []
-  );
+  // Atamalar: her TodoIndex için SSN dizisi (nested)
+  const [employeeSelections, setEmployeeSelections] = useState(() => {
+    // Eğer backend’den düz (flat) AssignedEmployees {SSN,TaskID,TodoIndex} geldiyse nested’e çevir
+    if (Array.isArray(norm.incomingAssignments) && norm.incomingAssignments.length) {
+      const looksFlat = norm.incomingAssignments.every(
+        a => a && (a.SSN || a.ssn) && (a.TodoIndex ?? a.todoIndex ?? a.todoindex) !== undefined
+      );
+      if (looksFlat) {
+        const byTodo = [];
+        norm.incomingAssignments.forEach(a => {
+          const idx = a.TodoIndex ?? a.todoIndex ?? a.todoindex ?? 0;
+          if (!byTodo[idx]) byTodo[idx] = [];
+          byTodo[idx].push(a.SSN ?? a.ssn);
+        });
+        return byTodo;
+      }
+      // Zaten nested ise
+      if (Array.isArray(norm.incomingAssignments[0])) return norm.incomingAssignments;
+    }
+    return [];
+  });
 
+  const [employees, setEmployees] = useState([]);
+
+  // Yeni todo formu
   const [newDesc, setNewDesc] = useState("");
   const [newRate, setNewRate] = useState("");
   const [newCount, setNewCount] = useState(1);
 
   // task prop’u değişirse state’i güncelle
   useEffect(() => {
-    const incoming = (task.Todos ?? task.todos ?? []).map((t, i) => ({
+    const incomingTodos = (task.Todos ?? task.todos ?? []).map((t, i) => ({
       TodoIndex: t.TodoIndex ?? i,
       Description: t.Description ?? t.description ?? "",
-      Importance: t.Importance ?? t.importance ?? 0,
+      Importance: Number(t.Importance ?? t.importance ?? 0),
       IsCompleted: !!(t.IsCompleted ?? t.isCompleted ?? t.done),
     }));
-    setTodos(incoming);
-    setEmployeeSelections(task.Assignments ?? task.assignments ?? []);
+    setTodos(incomingTodos);
+
+    const incAssign = task.AssignedEmployees ?? task.Assignees ?? task.Assignments ?? [];
+    const looksFlat = Array.isArray(incAssign) && incAssign.length
+      && incAssign.every(a => a && (a.SSN || a.ssn) && (a.TodoIndex ?? a.todoIndex ?? a.todoindex) !== undefined);
+
+    if (looksFlat) {
+      const byTodo = [];
+      incAssign.forEach(a => {
+        const idx = a.TodoIndex ?? a.todoIndex ?? a.todoindex ?? 0;
+        if (!byTodo[idx]) byTodo[idx] = [];
+        byTodo[idx].push(a.SSN ?? a.ssn);
+      });
+      setEmployeeSelections(byTodo);
+    } else {
+      setEmployeeSelections(Array.isArray(incAssign[0]) ? incAssign : []);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.TaskID, task.taskID]);
 
   // çalışanları yükle
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_URL}/api/Employees`, {
+    fetch(`${API_URL}/api/Employees`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Employees fetch failed");
+        return r.json();
+      })
       .then(setEmployees)
-      .catch(console.error);
-  }, [token]);
+      .catch((e) => console.error("Employees error:", e));
+  }, [API_URL, token]);
 
   // yerel tamamlanma
   const localCompletion = useMemo(() => {
@@ -75,16 +112,18 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
 
   // checkbox
   const handleCheck = (idx) => {
+    if (!isAdmin) return;
     const clone = todos.map((td, i) =>
       i === idx ? { ...td, IsCompleted: !td.IsCompleted } : td
     );
     setTodos(clone);
-    // otomatik kaydetmek istemezsen bu satırı kaldırabilirsin:
+    // İstersen otomatik kaydı kapatabilirsin:
     recalculateAndSave(clone, employeeSelections);
   };
 
   // çalışan seçimi
   const handleAssignmentChange = (todoIndex, j, ssn) => {
+    if (!isAdmin) return;
     setEmployeeSelections((prev) => {
       const copy = prev.map((x) => (x ? [...x] : []));
       if (!copy[todoIndex]) copy[todoIndex] = [];
@@ -95,6 +134,7 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
 
   // yeni To-Do
   const handleAddTodo = () => {
+    if (!isAdmin) return;
     if (!newDesc || !newRate || newCount < 1) {
       return alert("Tüm alanlar dolu olmalı");
     }
@@ -114,28 +154,44 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
     setNewCount(1);
   };
 
-  // ortak: DTO oluştur
-  const buildDto = (todosData, employeeData, completion) => ({
-    TaskID: norm.id,
-    TaskName: norm.name,
-    Start_date: norm.start ?? null,
-    Due_date: norm.due ?? null,
-    Completion_rate: completion ?? localCompletion,
-    Task_number: norm.taskNumber,
-    Pnumber: norm.pnumber,
-    Todos: (todosData ?? todos).map((t, i) => ({
+  // --- DTO üretimi ---
+  // Backend’in Assigned_To (SSN, TaskID, TodoIndex) mantığına uyum için flat liste de gönderiyoruz.
+  const buildDto = (todosData, employeeData, completion) => {
+    const tds = (todosData ?? todos).map((t, i) => ({
       TodoIndex: t.TodoIndex ?? i,
       Description: t.Description ?? "",
-      Importance: t.Importance ?? 0,
+      Importance: Number(t.Importance ?? 0),
       IsCompleted: !!t.IsCompleted,
-    })),
-    Assignments: (employeeData ?? employeeSelections).map((arr) =>
-      (arr ?? []).filter(Boolean)
-    ),
-  });
+    }));
+
+    const nested = (employeeData ?? employeeSelections);
+    const assignedFlat = (nested || []).flatMap((arr, idx) =>
+      (arr ?? []).filter(Boolean).map((ssn) => ({
+        SSN: ssn,
+        TaskID: norm.id,
+        TodoIndex: idx,
+      }))
+    );
+
+    return {
+      TaskID: norm.id,
+      TaskName: norm.name,
+      Start_date: norm.start ?? null,
+      Due_date: norm.due ?? null,
+      Completion_rate: completion ?? localCompletion,
+      Task_number: norm.taskNumber,
+      Pnumber: norm.pnumber,
+      Todos: tds,
+      // iki format birden gönderiyoruz; backend hangisini bekliyorsa onu kullanabilir
+      AssignedEmployees: assignedFlat,    // flat {SSN,TaskID,TodoIndex}
+      Assignments: nested                 // nested [[SSN,SSN], ...] (varsa)
+    };
+  };
 
   // kaydet (auto)
   const recalculateAndSave = async (todosData, employeeData) => {
+    if (!isAdmin) return;
+
     const doneSum = (todosData || [])
       .filter((t) => t.IsCompleted)
       .reduce((s, t) => s + (Number(t.Importance) || 0), 0);
@@ -147,41 +203,43 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
 
     const payload = buildDto(todosData, employeeData, newCompletion);
 
-    const res = await fetch(
-      `${process.env.REACT_APP_API_URL}/api/Tasks/${norm.id}`,
-      {
+    try {
+      const res = await fetch(`${API_URL}/api/Tasks/${norm.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
-      }
-    );
+      });
 
-    if (res.ok) {
-      const updated = await res.json();
-      onUpdate && onUpdate(updated);
-    } else {
-      alert("Güncelleme hatası: " + (await res.text()));
+      if (res.ok) {
+        const updated = await res.json();
+        onUpdate && onUpdate(updated);
+      } else {
+        const txt = await res.text();
+        console.error("PUT /Tasks failed:", txt);
+        alert("Güncelleme hatası: " + txt);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ağ hatası (Tasks PUT).");
     }
   };
 
   // manuel Kaydet butonu
   const handleSave = async () => {
+    if (!isAdmin) return;
     try {
       const dto = buildDto();
-      const res = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/Tasks/${norm.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(dto),
-        }
-      );
+      const res = await fetch(`${API_URL}/api/Tasks/${norm.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(dto),
+      });
 
       if (!res.ok) {
         const errText = await res.text();
@@ -199,11 +257,11 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
   };
 
   // çalışan label/value
-  const employeeValue = (emp) => emp.SSN ?? emp.ssn ?? emp.userid ?? "";
+  const employeeValue = (emp) => emp.SSN ?? emp.ssn ?? "";
   const employeeLabel = (emp) =>
-    emp.Fname || emp.Lname
+    (emp.Fname || emp.Lname)
       ? `${emp.Fname ?? ""} ${emp.Lname ?? ""} (${employeeValue(emp)})`
-      : `${emp.Username ?? emp.username ?? "Çalışan"} (${employeeValue(emp)})`;
+      : `${employeeValue(emp)}`;
 
   return (
     <div style={{ border: "1px solid #ccc", padding: "1rem", margin: "1rem 0" }}>
@@ -211,8 +269,8 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
         {norm.name} (ID: {norm.id})
       </h4>
       <p>
-        Başlangıç: {norm.start?.toString()?.slice(0, 10)} | Bitiş:{" "}
-        {norm.due?.toString()?.slice(0, 10)}
+        Başlangıç: {norm.start ? String(norm.start).slice(0, 10) : "-"} | Bitiş:{" "}
+        {norm.due ? String(norm.due).slice(0, 10) : "-"}
       </p>
       <p>
         Tamamlanma (yerel): %{localCompletion}{" "}
@@ -277,11 +335,12 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
             </label>
             <br />
             <label>
-              Kaç adet:{" "}
+              Kaç adet atama alanı:{" "}
               <input
                 type="number"
                 value={newCount}
                 onChange={(e) => setNewCount(Number(e.target.value))}
+                min={1}
               />
             </label>
             <br />

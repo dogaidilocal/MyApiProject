@@ -1,51 +1,35 @@
-// my-frontend/src/App.js
-import React, { useEffect, useState } from "react";
-import {
-  Routes,
-  Route,
-  Navigate,
-  Link,
-  useNavigate,
-} from "react-router-dom";
+// src/App.js
+import React, { useEffect, useMemo, useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+
+import AppShell from "./layout/AppShell";
 
 import LoginPage from "./components/LoginPage";
 import DepartmentList from "./components/DepartmentList";
 import DepartmentDetails from "./components/DepartmentDetails";
+import ProjectsPage from "./pages/ProjectsPage"; // projeler için sayfa
+import ProjectDetails from "./components/ProjectDetails";
+import TaskDetails from "./components/TaskDetails";
+import EmployeeList from "./components/EmployeeList";
+import ProjectLeaderList from "./components/ProjectLeaderList";
+import Dashboard from "./pages/Dashboard";
 
-function Topbar({ onLogout, hasToken }) {
-  const nav = useNavigate();
-  return (
-    <div style={{ padding: 12, borderBottom: "1px solid #ddd" }}>
-      <Link to="/" style={{ marginRight: 12, fontWeight: 700 }}>
-        Dashboard
-      </Link>
-      <Link to="/departments" style={{ marginRight: 12 }}>
-        Departmanlar
-      </Link>
-      {hasToken ? (
-        <button
-          onClick={() => {
-            onLogout();
-            nav("/login", { replace: true });
-          }}
-          style={{ marginLeft: 12 }}
-        >
-          Çıkış
-        </button>
-      ) : null}
-    </div>
-  );
+function getRoleFromToken(token) {
+  if (!token) return "";
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1] || ""));
+    const dotnetRole =
+      payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
+    const role = payload.role || dotnetRole || payload.roles;
+    if (Array.isArray(role)) return role[0] || "";
+    return role || "";
+  } catch {
+    return "";
+  }
 }
 
-function Dashboard() {
-  return (
-    <div style={{ padding: 16 }}>
-      <h1>Dashboard</h1>
-      <p>
-        <Link to="/departments">Departmanlar</Link>
-      </p>
-    </div>
-  );
+function Protected({ token, children }) {
+  return token ? children : <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -53,9 +37,19 @@ export default function App() {
   const [role, setRole] = useState(() => localStorage.getItem("role") || "");
 
   useEffect(() => {
-    if (token) localStorage.setItem("token", token);
-    else localStorage.removeItem("token");
+    if (token) {
+      localStorage.setItem("token", token);
+      const r = getRoleFromToken(token);
+      setRole(r);
+      localStorage.setItem("role", r || "");
+    } else {
+      localStorage.removeItem("token");
+      localStorage.removeItem("role");
+      setRole("");
+    }
   }, [token]);
+
+  const isAdmin = useMemo(() => role?.toLowerCase() === "admin", [role]);
 
   const handleLogout = () => {
     setToken("");
@@ -65,48 +59,63 @@ export default function App() {
   };
 
   return (
-    <>
-      <Topbar onLogout={handleLogout} hasToken={!!token} />
+    <Routes>
+      {/* Root yönlendirme */}
+      <Route
+        path="/"
+        element={<Navigate to={token ? "/dashboard" : "/login"} replace />}
+      />
 
-      <Routes>
-        {/* Root: token varsa dashboard, yoksa login */}
-        <Route
-          path="/"
-          element={<Navigate to={token ? "/dashboard" : "/login"} replace />}
-        />
+      {/* Login serbest */}
+      <Route path="/login" element={<LoginPage setToken={setToken} />} />
 
-        {/* Login */}
-        <Route path="/login" element={<LoginPage setToken={setToken} />} />
+      {/* Korumalı alan: AppShell + Outlet */}
+      <Route
+        element={
+          <Protected token={token}>
+            <AppShell onLogout={handleLogout} />
+          </Protected>
+        }
+      >
+        {/* Shell içi çocuk rotalar */}
+        <Route path="/dashboard" element={<Dashboard />} />
 
-        {/* Korunan sayfalar */}
-        <Route
-          path="/dashboard"
-          element={token ? <Dashboard /> : <Navigate to="/login" replace />}
-        />
         <Route
           path="/departments"
-          element={
-            token ? (
-              <DepartmentList token={token} role={role} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
+          element={<DepartmentList token={token} role={role} />}
         />
         <Route
           path="/departments/:dnumber"
-          element={
-            token ? (
-              <DepartmentDetails token={token} role={role} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
+          element={<DepartmentDetails token={token} role={role} />}
+        />
+        <Route
+          path="/departments/:dnumber/projects/:pnumber"
+          element={<ProjectDetails token={token} role={role} />}
         />
 
-        {/* Bilinmeyen yol */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </>
+        {/* Projeler sayfası (liste + detay layout’u) */}
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route
+          path="/projects/:pnumber"
+          element={<ProjectDetails token={token} role={role} isAdmin={isAdmin} />}
+        />
+
+        {/* Görev detayı (opsiyonel) */}
+        <Route
+          path="/tasks/:taskId"
+          element={<TaskDetails token={token} role={role} isAdmin={isAdmin} />}
+        />
+
+        {/* Çalışanlar & Liderler */}
+        <Route path="/employees" element={<EmployeeList />} />
+        <Route path="/leaders" element={<ProjectLeaderList />} />
+
+        {/* Shell içinde bilinmeyen yol -> dashboard */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Route>
+
+      {/* Shell dışındaki bilinmeyen yol -> root */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
