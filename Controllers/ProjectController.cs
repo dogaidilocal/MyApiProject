@@ -54,13 +54,29 @@ namespace MyApiProject.Controllers
             if (project.Pnumber == 0)
                 return BadRequest("Pnumber must be provided manually by the admin.");
 
+            // Pnumber benzersizlik kontrolü – 409 döndür, 500'e düşmesin
+            var exists = await _context.Projects.AnyAsync(p => p.Pnumber == project.Pnumber);
+            if (exists)
+                return Conflict($"Project with Pnumber {project.Pnumber} already exists.");
+
             if (project.Start_date.HasValue)
                 project.Start_date = DateTime.SpecifyKind(project.Start_date.Value, DateTimeKind.Utc);
             if (project.Due_date.HasValue)
                 project.Due_date = DateTime.SpecifyKind(project.Due_date.Value, DateTimeKind.Utc);
 
-            _context.Projects.Add(project);
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.Projects.Add(project);
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Unique violation gibi durumlarda anlamlı mesaj ver
+                return Problem(
+                    detail: ex.InnerException?.Message ?? ex.Message,
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Failed to create project");
+            }
 
             return CreatedAtAction(nameof(GetProject), new { id = project.Pnumber }, project);
         }

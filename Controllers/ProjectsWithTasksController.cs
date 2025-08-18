@@ -1,146 +1,263 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Cors;
 using MyApiProject.Data;
+using MyApiProject.Models;
+using System.Linq;
 
-[ApiController]
-[Route("api/[controller]")]
-[EnableCors("AllowFrontend")] // Bu controller'a policy'yi zorunlu kıl
-public class ProjectsWithTasksController : ControllerBase
+namespace MyApiProject.Controllers
 {
-    private readonly AppDbContext _context;
-    public ProjectsWithTasksController(AppDbContext context) => _context = context;
-
-    // ---- CORS preflight (ek güvence) -----------------------------------------
-    private const string AllowedOrigin = "http://localhost:3000";
-
-    // /api/ProjectsWithTasks için preflight
-    [HttpOptions]
-    public IActionResult Options()
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ProjectsWithTasksController : ControllerBase
     {
-        var origin = Request.Headers["Origin"].ToString();
-        if (origin == AllowedOrigin)
-        {
-            Response.Headers["Access-Control-Allow-Origin"] = origin;
-            Response.Headers["Vary"] = "Origin";
-        }
-        Response.Headers["Access-Control-Allow-Headers"] = "authorization, content-type";
-        Response.Headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS";
-        return Ok();
-    }
+        private readonly AppDbContext _context;
+        public ProjectsWithTasksController(AppDbContext context) => _context = context;
 
-    // /api/ProjectsWithTasks/{id} için preflight
-    [HttpOptions("{id}")]
-    public IActionResult OptionsById(int id)
-    {
-        var origin = Request.Headers["Origin"].ToString();
-        if (origin == AllowedOrigin)
+        // GET: api/ProjectsWithTasks
+        [HttpGet]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetProjectsWithTasks()
         {
-            Response.Headers["Access-Control-Allow-Origin"] = origin;
-            Response.Headers["Vary"] = "Origin";
-        }
-        Response.Headers["Access-Control-Allow-Headers"] = "authorization, content-type";
-        Response.Headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS";
-        return Ok();
-    }
-    // --------------------------------------------------------------------------
-
-    [HttpGet]
-    public async Task<IActionResult> GetProjectsWithTasks()
-    {
-        var projects = await _context.Projects
-            .Include(p => p.Department)
-            .Include(p => p.Tasks).ThenInclude(t => t.Todos)
-            .Include(p => p.Tasks).ThenInclude(t => t.AssignedEmployees).ThenInclude(a => a.Employee)
-            .Include(p => p.ProjectLeaders).ThenInclude(pl => pl.Employee)
-            .ToListAsync();
-
-        // (Opsiyonel) Department bağlama
-        foreach (var project in projects)
-        {
-            foreach (var task in project.Tasks)
+            try
             {
-                foreach (var assignment in task.AssignedEmployees)
+                // Projeleri yükle (AssignedEmployees hariç - ayrı çekeceğiz)
+                var list = await _context.Projects
+                    .AsNoTracking()
+                    .Include(p => p.Department)
+                    .Include(p => p.ProjectLeaders).ThenInclude(pl => pl.Employee)
+                    .Include(p => p.Tasks).ThenInclude(t => t.Todos)
+                    .OrderBy(p => p.Pnumber)
+                    .ToListAsync();
+
+                // Atamaları hafif projeksiyon ile çek (Id kolonu gerektirmeden)
+                var assignments = await _context.AssignedTos
+                    .AsNoTracking()
+                    .Select(a => new { a.TaskID, a.TodoIndex, a.SSN })
+                    .ToListAsync();
+
+                var assignmentsByTask = assignments
+                    .GroupBy(a => a.TaskID)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g
+                            .GroupBy(x => x.TodoIndex)
+                            .OrderBy(x => x.Key)
+                            .Select(x => x.Select(v => v.SSN).Where(ssn => !string.IsNullOrWhiteSpace(ssn)).ToArray())
+                            .ToArray()
+                    );
+
+                var data = list.Select(p => new
                 {
-                    if (assignment.Employee != null && assignment.Employee.Department == null)
+                    pnumber = p.Pnumber,
+                    pname = p.Pname ?? "",
+                    start_date = p.Start_date,
+                    due_date = p.Due_date,
+                    completion_status = p.Completion_status ?? 0,
+                    dnumber = p.Dnumber,
+                    department = p.Department == null
+                        ? null
+                        : new { dnumber = p.Department.Dnumber, dname = p.Department.Dname ?? "" },
+
+                    leader = (p.ProjectLeaders ?? new List<ProjectLeader>())
+                        .OrderByDescending(pl => pl.Start_date)
+                        .Select(pl => new
+                        {
+                            leaderID = pl.LeaderID ?? "",
+                            fullName = pl.Employee != null
+                                ? ($"{pl.Employee.Fname ?? ""} {pl.Employee.Lname ?? ""}").Trim()
+                                : null
+                        })
+                        .FirstOrDefault(),
+
+                    tasks = (p.Tasks ?? new List<ProjectTask>()).Select(t => new
                     {
-                        assignment.Employee.Department = await _context.Departments
-                            .FirstOrDefaultAsync(d => d.Dnumber == assignment.Employee.Dno);
-                    }
-                }
+                        taskID = t.TaskID,
+                        taskName = t.TaskName ?? "",
+                        start_date = t.Start_date,
+                        due_date = t.Due_date,
+                        completion_rate = t.Completion_rate ?? 0,
+                        task_number = t.Task_number ?? 0,
+                        pnumber = t.Pnumber,
+
+                        // To-do'lar
+                        Todos = (t.Todos ?? new List<TaskTodo>())
+                            .OrderBy(td => td.TodoIndex)
+                            .Select(td => new
+                            {
+                                TodoIndex = td.TodoIndex,
+                                Description = td.Description ?? "",
+                                Importance = td.Importance ?? 0,
+                                IsCompleted = td.IsCompleted
+                            })
+                            .ToList(),
+
+                        // TaskDetails için beklenen isimle gönderelim
+                        Assignments = assignmentsByTask.TryGetValue(t.TaskID, out var groups)
+                            ? groups
+                            : Array.Empty<string[]>()
+                    }).ToList()
+                });
+
+                return Ok(data);
             }
-        }
-
-        var payload = projects.Select(p => new
-        {
-            p.Pnumber,
-            p.Pname,
-            p.Start_date,
-            p.Due_date,
-            p.Completion_status,
-            p.Dnumber,
-            Department = p.Department,
-            Tasks = p.Tasks,
-            Leader = p.ProjectLeaders
-                .OrderByDescending(x => x.Start_date)
-                .Select(x => new
-                {
-                    x.LeaderID,
-                    FullName = (x.Employee != null)
-                        ? $"{x.Employee.Fname} {x.Employee.Lname}".Trim()
-                        : null
-                })
-                .FirstOrDefault()
-        });
-
-        return Ok(payload);
-    }
-
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetProjectDetails(int id)
-    {
-        var project = await _context.Projects
-            .Include(p => p.Department)
-            .Include(p => p.Tasks).ThenInclude(t => t.AssignedEmployees).ThenInclude(a => a.Employee)
-            .Include(p => p.ProjectLeaders).ThenInclude(pl => pl.Employee)
-            .FirstOrDefaultAsync(p => p.Pnumber == id);
-
-        if (project == null) return NotFound();
-
-        foreach (var task in project.Tasks)
-        {
-            foreach (var assignment in task.AssignedEmployees)
+            catch (Exception ex)
             {
-                if (assignment.Employee != null && assignment.Employee.Department == null)
-                {
-                    assignment.Employee.Department = await _context.Departments
-                        .FirstOrDefaultAsync(d => d.Dnumber == assignment.Employee.Dno);
-                }
+                // Log the exception for debugging
+                return StatusCode(500, new { 
+                    error = "Internal server error", 
+                    details = ex.Message,
+                    stackTrace = ex.StackTrace,
+                    innerException = ex.InnerException?.Message
+                });
             }
         }
 
-        var payload = new
+        // GET: api/ProjectsWithTasks/5
+        [HttpGet("{id:int}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetProjectDetails(int id)
         {
-            project.Pnumber,
-            project.Pname,
-            project.Start_date,
-            project.Due_date,
-            project.Completion_status,
-            project.Dnumber,
-            Department = project.Department,
-            Tasks = project.Tasks,
-            Leader = project.ProjectLeaders
-                .OrderByDescending(x => x.Start_date)
-                .Select(x => new
-                {
-                    x.LeaderID,
-                    FullName = (x.Employee != null)
-                        ? $"{x.Employee.Fname} {x.Employee.Lname}".Trim()
-                        : null
-                })
-                .FirstOrDefault()
-        };
+            try
+            {
+                var p = await _context.Projects
+                    .AsNoTracking()
+                    .Where(x => x.Pnumber == id)
+                    .Include(x => x.Department)
+                    .Include(x => x.ProjectLeaders).ThenInclude(pl => pl.Employee)
+                    .Include(x => x.Tasks).ThenInclude(t => t.Todos)
+                    .FirstOrDefaultAsync();
 
-        return Ok(payload);
+                if (p == null) return NotFound();
+
+                var taskIds = (p.Tasks ?? new List<ProjectTask>()).Select(t => t.TaskID).ToList();
+                var groupsByTask = new Dictionary<int, string[][]>();
+                
+                if (taskIds.Count > 0)
+                {
+                    var assignments = await _context.AssignedTos
+                        .AsNoTracking()
+                        .Where(a => taskIds.Contains(a.TaskID))
+                        .Select(a => new { a.TaskID, a.TodoIndex, a.SSN })
+                        .ToListAsync();
+
+                    groupsByTask = assignments
+                        .GroupBy(a => a.TaskID)
+                        .ToDictionary(
+                            g => g.Key,
+                            g => g
+                                .GroupBy(x => x.TodoIndex)
+                                .OrderBy(x => x.Key)
+                                .Select(x => x.Select(v => v.SSN).Where(ssn => !string.IsNullOrWhiteSpace(ssn)).ToArray())
+                                .ToArray()
+                        );
+                }
+
+                var result = new
+                {
+                    pnumber = p.Pnumber,
+                    pname = p.Pname ?? "",
+                    start_date = p.Start_date,
+                    due_date = p.Due_date,
+                    completion_status = p.Completion_status ?? 0,
+                    dnumber = p.Dnumber,
+                    department = p.Department == null
+                        ? null
+                        : new { dnumber = p.Department.Dnumber, dname = p.Department.Dname ?? "" },
+
+                    leader = (p.ProjectLeaders ?? new List<ProjectLeader>())
+                        .OrderByDescending(pl => pl.Start_date)
+                        .Select(pl => new
+                        {
+                            leaderID = pl.LeaderID ?? "",
+                            fullName = pl.Employee != null
+                                ? ($"{pl.Employee.Fname ?? ""} {pl.Employee.Lname ?? ""}").Trim()
+                                : null
+                        })
+                        .FirstOrDefault(),
+
+                    tasks = (p.Tasks ?? new List<ProjectTask>()).Select(t => new
+                    {
+                        taskID = t.TaskID,
+                        taskName = t.TaskName ?? "",
+                        start_date = t.Start_date,
+                        due_date = t.Due_date,
+                        completion_rate = t.Completion_rate ?? 0,
+                        task_number = t.Task_number ?? 0,
+                        pnumber = t.Pnumber,
+                        Todos = (t.Todos ?? new List<TaskTodo>())
+                            .OrderBy(td => td.TodoIndex)
+                            .Select(td => new
+                            {
+                                TodoIndex = td.TodoIndex,
+                                Description = td.Description ?? "",
+                                Importance = td.Importance ?? 0,
+                                IsCompleted = td.IsCompleted
+                            })
+                            .ToList(),
+                        Assignments = groupsByTask.TryGetValue(t.TaskID, out var arr)
+                            ? arr
+                            : Array.Empty<string[]>()
+                    }).ToList()
+                };
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    error = "Internal server error", 
+                    details = ex.Message,
+                    stackTrace = ex.StackTrace,
+                    innerException = ex.InnerException?.Message
+                });
+            }
+        }
+
+        // GET: api/ProjectsWithTasks/test
+        [HttpGet("test")]
+        [AllowAnonymous]
+        public async Task<IActionResult> TestData()
+        {
+            try
+            {
+                var projectCount = await _context.Projects.CountAsync();
+                var taskCount = await _context.Tasks.CountAsync();
+                var leaderCount = await _context.ProjectLeaders.CountAsync();
+                var todoCount = await _context.TaskTodos.CountAsync();
+                var assignmentCount = await _context.AssignedTos.CountAsync();
+
+                var sampleProject = await _context.Projects
+                    .AsNoTracking()
+                    .Include(p => p.Department)
+                    .Include(p => p.ProjectLeaders)
+                    .Include(p => p.Tasks)
+                    .FirstOrDefaultAsync();
+
+                return Ok(new
+                {
+                    counts = new
+                    {
+                        projects = projectCount,
+                        tasks = taskCount,
+                        leaders = leaderCount,
+                        todos = todoCount,
+                        assignments = assignmentCount
+                    },
+                    sampleProject = sampleProject != null ? new
+                    {
+                        pnumber = sampleProject.Pnumber,
+                        pname = sampleProject.Pname,
+                        hasDepartment = sampleProject.Department != null,
+                        hasLeaders = sampleProject.ProjectLeaders?.Count > 0,
+                        hasTasks = sampleProject.Tasks?.Count > 0
+                    } : null
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message, stackTrace = ex.StackTrace });
+            }
+        }
     }
 }

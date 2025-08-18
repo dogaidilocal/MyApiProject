@@ -68,8 +68,38 @@ namespace MyApiProject.Controllers
         [Authorize(Policy = "AdminOnly")]
         public async Task<ActionResult<ProjectTask>> CreateTask(ProjectTask task)
         {
+            // TaskID tablo tarafında identity değil. Sağlanmamışsa ya da çakışıyorsa yeni id ver.
+            if (task.TaskID == 0 || await _context.Tasks.AnyAsync(t => t.TaskID == task.TaskID))
+            {
+                var maxId = await _context.Tasks.MaxAsync(t => (int?)t.TaskID) ?? 0;
+                task.TaskID = maxId + 1;
+            }
+
+            if (task.Start_date.HasValue)
+                task.Start_date = DateTime.SpecifyKind(task.Start_date.Value, DateTimeKind.Utc);
+            if (task.Due_date.HasValue)
+                task.Due_date = DateTime.SpecifyKind(task.Due_date.Value, DateTimeKind.Utc);
+
             _context.Tasks.Add(task);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Eğer eşzamanlı başka bir ekleme aynı TaskID'yi aldıysa tekrar deneyelim
+                if (ex.InnerException != null && ex.InnerException.Message.Contains("duplicate key"))
+                {
+                    var maxId2 = await _context.Tasks.MaxAsync(t => (int?)t.TaskID) ?? 0;
+                    task.TaskID = maxId2 + 1;
+                    _context.Entry(task).State = EntityState.Added;
+                    await _context.SaveChangesAsync();
+                }
+                else
+                {
+                    throw;
+                }
+            }
             return CreatedAtAction(nameof(GetTask), new { id = task.TaskID }, task);
         }
 

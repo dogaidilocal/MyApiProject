@@ -5,139 +5,126 @@ using Microsoft.OpenApi.Models;
 using System.Text;
 using MyApiProject.Data;
 
-namespace MyApiProject
+var builder = WebApplication.CreateBuilder(args);
+
+// EF + JSON (cycle ignore)
+builder.Services.AddControllers().AddJsonOptions(x =>
+    x.JsonSerializerOptions.ReferenceHandler =
+        System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles);
+
+// Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
 {
-    public class Program
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyApiProject", Version = "v1" });
+    c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        public static void Main(string[] args)
+        Description = "Bearer {token}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
         {
-            // Npgsql zaman damgası davranışları
-            AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
-            AppContext.SetSwitch("Npgsql.DisableDateTimeInfinityConversions", true);
-
-            var builder = WebApplication.CreateBuilder(args);
-
-            // Controllers + JSON (cycle ignore)
-            builder.Services.AddControllers().AddJsonOptions(x =>
-                x.JsonSerializerOptions.ReferenceHandler =
-                    System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles);
-
-            // Swagger + JWT şeması
-            builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(c =>
+            new OpenApiSecurityScheme
             {
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyApiProject", Version = "v1" });
-                c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
-
-                c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                Reference = new OpenApiReference
                 {
-                    Description = "JWT Authorization header using the Bearer scheme. Example: 'Bearer eyJhb...'",
-                    Name = "Authorization",
-                    In = ParameterLocation.Header,
-                    Type = SecuritySchemeType.ApiKey,
-                    Scheme = "Bearer"
-                });
-
-                c.AddSecurityRequirement(new OpenApiSecurityRequirement
-                {
-                    {
-                        new OpenApiSecurityScheme
-                        {
-                            Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" },
-                            Scheme = "oauth2",
-                            Name = "Bearer",
-                            In = ParameterLocation.Header
-                        },
-                        new List<string>()
-                    }
-                });
-            });
-
-            // Db
-            builder.Services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-            // Auth
-            builder.Services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    ValidIssuer = builder.Configuration["Jwt:Issuer"],
-                    ValidAudience = builder.Configuration["Jwt:Audience"],
-                    IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
-                };
-            });
-
-            builder.Services.AddAuthorization();
-
-            // CORS: sadece frontend origin’leri
-            var allowedOrigins = new[]
-            {
-                "http://localhost:3000",
-                "http://127.0.0.1:3000",
-                "https://localhost:3000",
-                "https://127.0.0.1:3000",
-                "http://192.168.1.106:3000" // yerel ağdan erişim gerekiyorsa
-            };
-
-            builder.Services.AddCors(options =>
-            {
-                options.AddPolicy("AllowFrontend", policy =>
-                    policy.WithOrigins(allowedOrigins)
-                          .AllowAnyHeader()      // Authorization dahil
-                          .AllowAnyMethod());    // GET/POST/PUT/DELETE...
-            });
-
-            var app = builder.Build();
-
-            // ── CORS shim: Dev istisna sayfası 500 döndürse bile CORS başlığını ekle ──
-            app.Use(async (ctx, next) =>
-            {
-                if (ctx.Request.Headers.TryGetValue("Origin", out var origin) &&
-                    allowedOrigins.Contains(origin))
-                {
-                    ctx.Response.Headers["Access-Control-Allow-Origin"] = origin;
-                    ctx.Response.Headers["Vary"] = "Origin";
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
                 }
-                await next();
-            });
-
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseDeveloperExceptionPage();
-            }
-
-            // Swagger (/swagger)
-            app.UseSwagger();
-            app.UseSwaggerUI();
-
-            app.UseRouting();
-
-            // CORS → Auth sırası önemli
-            app.UseCors("AllowFrontend");
-            app.UseAuthentication();
-            app.UseAuthorization();
-
-            app.MapControllers();
-
-            // Opsiyonel: kökten Swagger'a yönlendir
-            app.MapGet("/", ctx =>
-            {
-                ctx.Response.Redirect("/swagger");
-                return Task.CompletedTask;
-            });
-
-            app.Run();
+            },
+            new List<string>()
         }
-    }
+    });
+});
+
+// DB
+builder.Services.AddDbContext<AppDbContext>(opt =>
+    opt.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// AuthN/Z
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+    };
+});
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireRole("admin"));
+});
+
+// -------- CORS (tek yerden) --------
+var allowedOrigins = new[]
+{
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://localhost:3000",
+    "https://127.0.0.1:3000"
+    // ihtiyacın varsa yerel ağ IP'n ekle
+};
+builder.Services.AddCors(opt =>
+{
+    opt.AddPolicy("AllowFrontend", policy =>
+        policy
+            .WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials()   // Authorization header varsa gerekli
+            .WithExposedHeaders("Content-Disposition") // Download headers için
+    );
+});
+
+var app = builder.Build();
+
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+AppContext.SetSwitch("Npgsql.DisableDateTimeInfinityConversions", true);
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
 }
+
+app.UseSwagger();
+app.UseSwaggerUI();
+
+// pipeline
+app.UseRouting();
+app.UseCors("AllowFrontend");   // <- Routing'den hemen sonra
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Preflight'ı garanti altına al (opsiyonel ama faydalı)
+app.Use(async (ctx, next) =>
+{
+    if (string.Equals(ctx.Request.Method, "OPTIONS", StringComparison.OrdinalIgnoreCase))
+    {
+        // CORS middleware header'ları zaten yazacak; 204 dönmek yeterli
+        ctx.Response.StatusCode = StatusCodes.Status204NoContent;
+        return;
+    }
+    await next();
+});
+
+app.MapControllers();
+
+app.Run();

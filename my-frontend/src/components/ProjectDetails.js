@@ -26,15 +26,15 @@ const nTask = (t) => ({
   pnumber: t?.pnumber ?? t?.Pnumber,
   dnumber: t?.dnumber ?? t?.Dnumber,
   todos: t?.todos ?? t?.Todos ?? [],
-  assignees: t?.assignees ?? t?.Assignees ?? [],
+  assignees: t?.assignees ?? t?.Assignees ?? t?.Assignments ?? [],
 });
 
 const toUtcOrNull = (s) => (s ? new Date(s).toISOString() : null);
 
-export default function ProjectDetails({ token: propToken, role }) {
+export default function ProjectDetails({ token: propToken, role, project: projectProp }) {
   const { dnumber, pnumber } = useParams();
-  const depNum = Number(dnumber);
-  const projNum = Number(pnumber);
+  const depNum = projectProp?.dnumber ?? Number(dnumber);
+  const projNum = projectProp?.pnumber ?? Number(pnumber);
 
   const token = propToken || localStorage.getItem("token") || "";
   const isAdmin = useMemo(() => (role || localStorage.getItem("role") || "").toLowerCase() === "admin", [role]);
@@ -69,8 +69,34 @@ export default function ProjectDetails({ token: propToken, role }) {
     return res;
   };
 
-  // Proje ve görevleri yükle (with fallback)
+  // Eğer üst bileşenden `project` verisi geldiyse onu kullan, fetch etme
   useEffect(() => {
+    if (!projectProp) return;
+    setLoading(true);
+    setErr("");
+    try {
+      const p = nProject(projectProp);
+      const t = Array.isArray(projectProp.tasks || projectProp.Tasks)
+        ? (projectProp.tasks || projectProp.Tasks).map(nTask)
+        : [];
+      setProject(p);
+      setTasks(t);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectProp]);
+
+  // Proje ve görevleri yükle (with fallback) — sadece route parametreleri varsa
+  useEffect(() => {
+    if (projectProp) return; // prop ile geldiyse atla
+
+    // projNum geçerli değilse fetch yapılmamalı
+    if (!Number.isFinite(projNum)) {
+      setLoading(false);
+      setErr("");
+      return;
+    }
+
     let cancelled = false;
     const load = async () => {
       setLoading(true);
@@ -123,7 +149,7 @@ export default function ProjectDetails({ token: propToken, role }) {
 
     load();
     return () => { cancelled = true; };
-  }, [projNum, token]);
+  }, [projNum, token, projectProp]);
 
   const completionOf = (t) => Math.round(Number(t.completion_rate || 0));
   const totalRate = useMemo(() => {
@@ -172,8 +198,8 @@ export default function ProjectDetails({ token: propToken, role }) {
     const body = {
       ...(isEdit ? { taskID: Number(form.taskID) } : {}),
       taskName: (form.taskName || "").trim(),
-      pnumber: projNum,
-      dnumber: depNum,
+      pnumber: project?.pnumber ?? projNum,
+      dnumber: project?.dnumber ?? depNum,
       start_date: toUtcOrNull(form.start_date),
       due_date: toUtcOrNull(form.due_date),
       completion_rate: Number(form.completion_rate || 0),
@@ -263,7 +289,7 @@ export default function ProjectDetails({ token: propToken, role }) {
           Departman: <b>{project.department?.dname || project.dnumber}</b>
         </span>
         <span style={{ marginLeft: "auto", color: "#666" }}>
-          Tamamlanma (ortalama): <b>%{totalRate}</b>
+          Tamamlanma (ortalama): <b>%{(tasks.length && Math.round(tasks.reduce((a, t) => a + Number(t.completion_rate || 0), 0) / tasks.length)) || 0}</b>
         </span>
       </div>
 
@@ -274,7 +300,7 @@ export default function ProjectDetails({ token: propToken, role }) {
       )}
 
       <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-        <Link to={`/departments/${depNum}`}>← Bölüme dön</Link>
+        {Number.isFinite(depNum) && <Link to={`/departments/${depNum}`}>← Bölüme dön</Link>}
         {(isAdmin || isLeader) && (
           <span style={{ marginLeft: "auto", color: "#666" }}>
             Rol: <b>{isAdmin ? "Admin" : "Leader"}</b>
@@ -452,7 +478,7 @@ export default function ProjectDetails({ token: propToken, role }) {
 
                   {Array.isArray(t.assignees) && t.assignees.length > 0 && (
                     <div style={{ marginTop: 6, fontSize: 12, color: "#555" }}>
-                      Atananlar:{" "}
+                      Atananlar: {" "}
                       {t.assignees
                         .map((a) => a.employee || a.ssn)
                         .filter(Boolean)

@@ -86,18 +86,26 @@ namespace MyApiProject.Data
                e.HasKey(t => t.TaskID);
            });
 
-           
-modelBuilder.Entity<TaskTodo>(e =>
-{
-    e.ToTable("Task_Todo");
-    e.HasKey(x => new { x.TaskID, x.TodoIndex });
-});
 
-modelBuilder.Entity<AssignedTo>(e =>
-{
-    e.ToTable("Assigned_To");
-    e.HasKey(a => a.Id); // tekil Id kolonunu PK yaptık
-});
+            modelBuilder.Entity<TaskTodo>(e =>
+            {
+                e.ToTable("Task_Todo");
+                e.HasKey(x => new { x.TaskID, x.TodoIndex });
+            });
+
+            modelBuilder.Entity<AssignedTo>(e =>
+            {
+                e.ToTable("Assigned_To");
+                e.HasKey(a => a.Id); // tekil Id kolonunu PK yaptık
+            });
+
+            modelBuilder.Entity<ProjectLeader>(e =>
+            {
+                e.ToTable("Project_Leader");
+                e.HasKey(pl => pl.LeaderID);
+                e.Property(pl => pl.LeaderID).HasColumnName("LeaderSSN");
+            });
+
 
 
 

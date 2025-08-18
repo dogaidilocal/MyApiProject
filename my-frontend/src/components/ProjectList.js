@@ -69,41 +69,47 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
 
   // Lider atama (1) /project/{pnumber}/assign; olmazsa (2) POST /ProjectLeaders
   const tryAssignLeader = async (project) => {
-    if (!selectedEmp) return true; // lider seçilmemişse atlama
-    const token = localStorage.getItem("token");
-    const leaderSSN = employeeId(selectedEmp);
+    try {
+      if (!selectedEmp) return true; // lider seçilmemişse atlama
+      const token = localStorage.getItem("token");
+      const leaderSSN = employeeId(selectedEmp);
 
-    // 1) tercihen assign endpoint'i
-    const body1 = { leaderSSN, usernameForUserTable: null };
-    const res1 = await fetch(
-      `${API_URL}/api/ProjectLeaders/project/${project.pnumber}/assign`,
-      {
+      // 1) tercihen assign endpoint'i
+      const body1 = { leaderSSN, usernameForUserTable: null };
+      const res1 = await fetch(
+        `${API_URL}/api/ProjectLeaders/project/${project.pnumber}/assign`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body1),
+        }
+      );
+      if (res1.ok) return true;
+
+      // 2) fallback: doğrudan ProjectLeaders
+      const body2 = {
+        LeaderSSN: leaderSSN,
+        Pnumber: project.pnumber,
+        Start_date: new Date().toISOString(),
+      };
+      const res2 = await fetch(`${API_URL}/api/ProjectLeaders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body1),
-      }
-    );
-    if (res1.ok) return true;
+        body: JSON.stringify(body2),
+      });
 
-    // 2) fallback: doğrudan ProjectLeaders
-    const body2 = {
-      LeaderSSN: leaderSSN,
-      Pnumber: project.pnumber,
-      Start_date: new Date().toISOString(),
-    };
-    const res2 = await fetch(`${API_URL}/api/ProjectLeaders`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body2),
-    });
-
-    return res2.ok;
+      return res2.ok;
+    } catch (err) {
+      console.error("Leader assign failed:", err);
+      // Lider atama başarısız olabilir; projeyi yine de oluşturmuş kabul edelim
+      return false;
+    }
   };
 
   // ── submit ─────────────────────────────────────────────────────────────────
@@ -126,13 +132,13 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
     }
 
     const payload = {
-      pnumber,
-      pname: form.pname,
-      start_date: toUTC(form.start_date),
-      due_date: toUTC(form.due_date),
-      completion_status: completion,
-      dnumber,
-      tasks: [],
+      Pnumber: pnumber,
+      Pname: form.pname,
+      Start_date: toUTC(form.start_date),
+      Due_date: toUTC(form.due_date),
+      Completion_status: completion,
+      Dnumber: dnumber,
+      Tasks: [],
     };
 
     try {
@@ -154,10 +160,10 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
 
       const created = await response.json();
 
-      // 2) Lider seçiliyse ata
+      // 2) Lider seçiliyse ata (başarısız olsa bile devam et)
       const assigned = await tryAssignLeader(created);
-      if (!assigned) {
-        alert("Proje oluşturuldu fakat lider atanamadı.");
+      if (!assigned && selectedEmp) {
+        console.warn("Lider atanamadı, formda seçilmişti ancak atama başarısız oldu.");
       }
 
       // 3) UI temizle & üst bileşeni haberdar et
@@ -174,6 +180,7 @@ function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
       setSelectedEmp(null);
       setEmpQuery("");
     } catch (err) {
+      console.error("Project create failed:", err);
       alert("Bir hata oluştu: " + err.message);
     }
   };

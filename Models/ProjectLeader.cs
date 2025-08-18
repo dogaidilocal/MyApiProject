@@ -10,6 +10,7 @@ namespace MyApiProject.Models
     {
         [Key]
         [StringLength(9)]
+        [Column("LeaderSSN")]
         public string LeaderID { get; set; }
 
         public int Pnumber { get; set; }
