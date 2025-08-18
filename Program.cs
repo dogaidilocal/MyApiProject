@@ -113,18 +113,6 @@ app.UseCors("AllowFrontend");   // <- Routing'den hemen sonra
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Preflight'ı garanti altına al (opsiyonel ama faydalı)
-app.Use(async (ctx, next) =>
-{
-    if (string.Equals(ctx.Request.Method, "OPTIONS", StringComparison.OrdinalIgnoreCase))
-    {
-        // CORS middleware header'ları zaten yazacak; 204 dönmek yeterli
-        ctx.Response.StatusCode = StatusCodes.Status204NoContent;
-        return;
-    }
-    await next();
-});
-
 app.MapControllers();
 
 app.Run();
