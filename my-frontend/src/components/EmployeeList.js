@@ -8,6 +8,9 @@ function EmployeeList() {
   const [err, setErr]           = useState("");
   const [q, setQ]               = useState("");
 
+  const role = (localStorage.getItem("role") || "").toLowerCase();
+  const isAdmin = role === "admin";
+
   // --- casing-dostu yardımcılar ---
   const getId   = (e) => e.SSN ?? e.ssn ?? e.id ?? e.userId ?? e.userid;
   const fName   = (e) => e.Fname ?? e.fname ?? e.firstName ?? "";
@@ -71,6 +74,63 @@ function EmployeeList() {
     });
   }, [employees, q]);
 
+  // ---- Admin form state ----
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ SSN: "", Fname: "", Lname: "", Dno: "", Username: "", Password: "" });
+
+  const openNew = () => {
+    setForm({ SSN: "", Fname: "", Lname: "", Dno: "", Username: "", Password: "" });
+    setShowForm(true);
+  };
+  const onChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+
+  const createEmployee = async () => {
+    const token = localStorage.getItem("token");
+    try {
+      const res = await fetch(`${API_URL}/api/Employees`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          SSN: form.SSN,
+          Fname: form.Fname,
+          Lname: form.Lname,
+          Dno: Number(form.Dno || 0),
+          Username: form.Username || form.Fname?.toLowerCase(),
+          Password: form.Password || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+      const created = await res.json();
+      await fetchEmployees();
+      setShowForm(false);
+      // Admin’e oluşturulan bilgiler için bildirim
+      alert(`Kullanıcı oluşturuldu\nSSN: ${created.SSN}\nUsername: ${created.Username}\nŞifre: ${created.Password}\nRol: ${created.Role}`);
+    } catch (e) {
+      alert("Ekleme hatası: " + e.message);
+    }
+  };
+
+  const deleteEmployee = async (ssn) => {
+    if (!window.confirm("Bu çalışan silinsin mi?")) return;
+    const token = localStorage.getItem("token");
+    try {
+      const res = await fetch(`${API_URL}/api/Employees/${ssn}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await fetchEmployees();
+    } catch (e) {
+      alert("Silme hatası: " + e.message);
+    }
+  };
+
   return (
     <div className="section">
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -84,9 +144,30 @@ function EmployeeList() {
         <button onClick={() => fetchEmployees()} disabled={loading} style={{ padding: "6px 10px" }}>
           {loading ? "Yükleniyor..." : "↻ Yenile"}
         </button>
+        {isAdmin && (
+          <button onClick={openNew} style={{ marginLeft: 8 }}>+ Yeni Çalışan</button>
+        )}
       </div>
 
       {err && <p style={{ color: "red", marginTop: 8 }}>Hata: {err}</p>}
+
+      {isAdmin && showForm && (
+        <div style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Yeni Çalışan Ekle</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <label>SSN<input name="SSN" value={form.SSN} onChange={onChange} /></label>
+            <label>Ad<input name="Fname" value={form.Fname} onChange={onChange} /></label>
+            <label>Soyad<input name="Lname" value={form.Lname} onChange={onChange} /></label>
+            <label>Departman No<input name="Dno" type="number" value={form.Dno} onChange={onChange} /></label>
+            <label>Kullanıcı Adı<input name="Username" value={form.Username} onChange={onChange} placeholder="Boş bırakırsan ad'dan üretir" /></label>
+            <label>Şifre<input name="Password" value={form.Password} onChange={onChange} placeholder="Boş bırakırsan otomatik" /></label>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <button onClick={createEmployee} style={{ marginRight: 8 }}>Kaydet</button>
+            <button onClick={() => setShowForm(false)}>İptal</button>
+          </div>
+        </div>
+      )}
 
       {!err && !loading && filtered.length === 0 && (
         <p style={{ marginTop: 12 }}>Kayıt bulunamadı.</p>
@@ -109,6 +190,11 @@ function EmployeeList() {
                 {`${fName(e)} ${lName(e)}`.trim() || "İsimsiz"}
               </strong>{" "}
               — SSN: {getId(e) ?? "—"} — Departman: {deptNm(e)}
+              {isAdmin && (
+                <span style={{ float: "right" }}>
+                  <button onClick={() => deleteEmployee(getId(e))} style={{ color: "red" }}>Sil</button>
+                </span>
+              )}
             </li>
           ))}
         </ul>

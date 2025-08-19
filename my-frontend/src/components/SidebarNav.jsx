@@ -15,6 +15,8 @@ const itemStyle = (isActive) => ({
 });
 
 export default function SidebarNav() {
+  const role = (localStorage.getItem("role") || "").toLowerCase();
+  const isAdmin = role === "admin";
   return (
     <nav
       style={{
@@ -39,6 +41,11 @@ export default function SidebarNav() {
       <NavLink to="/leaders" style={({ isActive }) => itemStyle(isActive)}>
         <span role="img" aria-label="leader">👑</span> Proje Liderleri
       </NavLink>
+      {isAdmin && (
+        <NavLink to="/admin/credentials" style={({ isActive }) => itemStyle(isActive)}>
+          <span role="img" aria-label="users">🔐</span> Kullanıcı Bilgileri
+        </NavLink>
+      )}
     </nav>
   );
 }

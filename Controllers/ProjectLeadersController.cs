@@ -62,7 +62,7 @@ namespace MyApiProject.Controllers
 
         // ⬇️ YENİ: projeye lider ata + users.Role=Leader’a yükselt (varsa)
         [HttpPost("project/{pnumber}/assign")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "AdminOnly")] // sadece admin atayabilir
         public async Task<IActionResult> AssignLeaderToProject(
             int pnumber,
             [FromBody] AssignLeaderRequest body)
@@ -97,6 +97,7 @@ namespace MyApiProject.Controllers
             }
 
             // users tablosunda lider rolüne yükselt
+            // 1) İsimle verilen username varsa doğrudan onu güncelle
             if (!string.IsNullOrWhiteSpace(body.UsernameForUserTable))
             {
                 var u = await _context.Users
@@ -105,6 +106,29 @@ namespace MyApiProject.Controllers
                 {
                     u.Role = "Leader";
                     _context.Entry(u).State = EntityState.Modified;
+                }
+            }
+            else
+            {
+                // 2) Username verilmediyse Employee ad/soyadından türetilmiş
+                //    UsersController ile aynı eşleştirme mantığını kullan
+                string Normalize(string? s) => (s ?? string.Empty).Trim().ToLower();
+                var f = Normalize(employee.Fname);
+                var l = Normalize(employee.Lname);
+                
+                var allUsers = await _context.Users.ToListAsync();
+                var matchingUser = allUsers.FirstOrDefault(u =>
+                {
+                    var un = Normalize(u.Username);
+                    return un == f ||
+                           un == ($"{f}.{l}") ||
+                           un == ($"{f}{l}");
+                });
+                
+                if (matchingUser != null && !string.Equals(matchingUser.Role, "Leader", StringComparison.OrdinalIgnoreCase))
+                {
+                    matchingUser.Role = "Leader";
+                    _context.Entry(matchingUser).State = EntityState.Modified;
                 }
             }
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyApiProject.Data;
 using MyApiProject.Models;
+using System.Security.Claims;
 
 namespace MyApiProject.Controllers
 {
@@ -15,6 +16,34 @@ namespace MyApiProject.Controllers
         public ProjectsController(AppDbContext context)
         {
             _context = context;
+        }
+
+        // ---- helpers: role checks ----
+        private static bool IsAdmin(ClaimsPrincipal user) => user.IsInRole("admin");
+
+        private async Task<string?> FindEmployeeSsnForUsernameAsync(string? username)
+        {
+            var u = (username ?? string.Empty).Trim().ToLower();
+            if (string.IsNullOrEmpty(u)) return null;
+            var list = await _context.Employees.AsNoTracking().ToListAsync();
+            foreach (var e in list)
+            {
+                var f = (e.Fname ?? string.Empty).Trim().ToLower();
+                var l = (e.Lname ?? string.Empty).Trim().ToLower();
+                if (u == f || u == ($"{f}.{l}") || u == ($"{f}{l}")) return e.SSN;
+            }
+            return null;
+        }
+
+        private async Task<bool> IsLeaderOfAsync(ClaimsPrincipal user, int pnumber)
+        {
+            var ssn = await FindEmployeeSsnForUsernameAsync(user.Identity?.Name);
+            if (string.IsNullOrEmpty(ssn)) return false;
+            var leader = await _context.ProjectLeaders
+                .AsNoTracking()
+                .OrderByDescending(x => x.Start_date)
+                .FirstOrDefaultAsync(x => x.Pnumber == pnumber);
+            return leader != null && string.Equals(leader.LeaderID, ssn, StringComparison.OrdinalIgnoreCase);
         }
 
         // GET: api/Projects
@@ -83,7 +112,7 @@ namespace MyApiProject.Controllers
 
         // PUT: api/Projects/5
         [HttpPut("{id}")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize] // Admin veya ilgili projenin lideri düzenleyebilir
         public async Task<IActionResult> UpdateProject(int id, Project project)
         {
             if (id != project.Pnumber)
@@ -93,6 +122,13 @@ namespace MyApiProject.Controllers
                 project.Start_date = DateTime.SpecifyKind(project.Start_date.Value, DateTimeKind.Utc);
             if (project.Due_date.HasValue)
                 project.Due_date = DateTime.SpecifyKind(project.Due_date.Value, DateTimeKind.Utc);
+
+            // Yetki kontrolü
+            if (!IsAdmin(User))
+            {
+                var can = await IsLeaderOfAsync(User, id);
+                if (!can) return Forbid();
+            }
 
             _context.Entry(project).State = EntityState.Modified;
 

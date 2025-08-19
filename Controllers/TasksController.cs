@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MyApiProject.Data;
 using MyApiProject.Models;
 using MyApiProject.Models.Dto;
+using System.Security.Claims;
 
 namespace MyApiProject.Controllers
 {
@@ -14,6 +15,38 @@ namespace MyApiProject.Controllers
     {
         private readonly AppDbContext _context;
         public TasksController(AppDbContext context) => _context = context;
+
+        // ---- helpers: role checks ----
+        private static bool IsAdmin(ClaimsPrincipal user) => user.IsInRole("admin");
+
+        private async Task<string?> FindEmployeeSsnForUsernameAsync(string? username)
+        {
+            var u = (username ?? string.Empty).Trim().ToLower();
+            if (string.IsNullOrEmpty(u)) return null;
+            var list = await _context.Employees.AsNoTracking().ToListAsync();
+            foreach (var e in list)
+            {
+                var f = (e.Fname ?? string.Empty).Trim().ToLower();
+                var l = (e.Lname ?? string.Empty).Trim().ToLower();
+                if (u == f || u == ($"{f}.{l}") || u == ($"{f}{l}")) return e.SSN;
+            }
+            return null;
+        }
+
+        private async Task<bool> IsLeaderOfTaskAsync(ClaimsPrincipal user, int taskId)
+        {
+            var ssn = await FindEmployeeSsnForUsernameAsync(user.Identity?.Name);
+            if (string.IsNullOrEmpty(ssn)) return false;
+
+            var task = await _context.Tasks.AsNoTracking().FirstOrDefaultAsync(t => t.TaskID == taskId);
+            if (task == null) return false;
+
+            var leader = await _context.ProjectLeaders
+                .AsNoTracking()
+                .OrderByDescending(x => x.Start_date)
+                .FirstOrDefaultAsync(x => x.Pnumber == task.Pnumber);
+            return leader != null && string.Equals(leader.LeaderID, ssn, StringComparison.OrdinalIgnoreCase);
+        }
 
         [HttpGet("hello")]
         [AllowAnonymous]
@@ -65,9 +98,21 @@ namespace MyApiProject.Controllers
         }
 
         [HttpPost]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize] // Admin veya ilgili projenin lideri ekleyebilir
         public async Task<ActionResult<ProjectTask>> CreateTask(ProjectTask task)
         {
+            if (!IsAdmin(User))
+            {
+                // Yeni task: Pnumber üzerinden kontrol
+                var ssn = await FindEmployeeSsnForUsernameAsync(User.Identity?.Name);
+                if (string.IsNullOrEmpty(ssn)) return Forbid();
+                var leader = await _context.ProjectLeaders.AsNoTracking()
+                    .OrderByDescending(x => x.Start_date)
+                    .FirstOrDefaultAsync(x => x.Pnumber == task.Pnumber);
+                if (leader == null || !string.Equals(leader.LeaderID, ssn, StringComparison.OrdinalIgnoreCase))
+                    return Forbid();
+            }
+
             // TaskID tablo tarafında identity değil. Sağlanmamışsa ya da çakışıyorsa yeni id ver.
             if (task.TaskID == 0 || await _context.Tasks.AnyAsync(t => t.TaskID == task.TaskID))
             {
@@ -104,7 +149,7 @@ namespace MyApiProject.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize] // Admin veya ilgili projenin lideri güncelleyebilir
         public async Task<IActionResult> UpdateTask(int id, TaskDto dto)
         {
             if (id != dto.TaskID) return BadRequest("Task ID uyuşmuyor");
@@ -115,6 +160,12 @@ namespace MyApiProject.Controllers
                 .FirstOrDefaultAsync(t => t.TaskID == id);
 
             if (existing == null) return NotFound("Task bulunamadı.");
+
+            if (!IsAdmin(User))
+            {
+                var can = await IsLeaderOfTaskAsync(User, id);
+                if (!can) return Forbid();
+            }
 
             // temel alanlar
             existing.TaskName = dto.TaskName;
@@ -175,11 +226,17 @@ namespace MyApiProject.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize] // Admin veya ilgili projenin lideri silebilir
         public async Task<IActionResult> DeleteTask(int id)
         {
             var task = await _context.Tasks.FindAsync(id);
             if (task == null) return NotFound();
+
+            if (!IsAdmin(User))
+            {
+                var can = await IsLeaderOfTaskAsync(User, id);
+                if (!can) return Forbid();
+            }
 
             _context.Tasks.Remove(task);
             await _context.SaveChangesAsync();

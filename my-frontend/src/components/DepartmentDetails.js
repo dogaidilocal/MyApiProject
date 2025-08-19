@@ -29,6 +29,9 @@ export default function DepartmentDetails({ token, role }) {
     due_date: "",
     completion_status: 0,
   });
+  // Lider atama UI
+  const [employees, setEmployees] = useState([]);
+  const [leaderSSN, setLeaderSSN] = useState("");
 
   // Departman & Projeleri yükle
   useEffect(() => {
@@ -65,6 +68,11 @@ export default function DepartmentDetails({ token, role }) {
     }
 
     load();
+    // çalışanları da yükle (lider combobox için)
+    fetch(`${API_URL}/api/Employees`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setEmployees)
+      .catch(() => setEmployees([]));
     return () => {
       cancelled = true;
     };
@@ -80,6 +88,7 @@ export default function DepartmentDetails({ token, role }) {
       due_date: "",
       completion_status: 0,
     });
+    setLeaderSSN(""); // Lider seçimini sıfırla
     setShowForm(true);
   };
 
@@ -92,11 +101,13 @@ export default function DepartmentDetails({ token, role }) {
       due_date: (p.due_date || "").slice(0, 10),
       completion_status: Number(p.completion_status || 0),
     });
+    setLeaderSSN(""); // Lider seçimini sıfırla
     setShowForm(true);
   };
 
   const closeForm = () => {
     setShowForm(false);
+    setLeaderSSN(""); // Form kapatılırken lider seçimini sıfırla
   };
 
   const onChange = (e) => {
@@ -177,6 +188,22 @@ export default function DepartmentDetails({ token, role }) {
         }
         return [...list, saved];
       });
+
+      // Lider seçilmişse ata (yalnızca admin için uç zaten kısıtlı)
+      if (isAdmin && leaderSSN) {
+        try {
+          await fetch(`${API_URL}/api/ProjectLeaders/project/${body.pnumber}/assign`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ LeaderSSN: leaderSSN, UsernameForUserTable: null }),
+          });
+        } catch (e) {
+          console.error("Lider atama hatası:", e);
+        }
+      }
 
       closeForm();
     } catch (e) {
@@ -346,6 +373,23 @@ export default function DepartmentDetails({ token, role }) {
                 max={100}
                 style={{ display: "block", width: "100%" }}
               />
+            </label>
+
+            {/* Lider seçimi (opsiyonel) */}
+            <label>
+              Proje Lideri (opsiyonel)
+              <select
+                value={leaderSSN}
+                onChange={(e) => setLeaderSSN(e.target.value)}
+                style={{ display: "block", width: "100%" }}
+              >
+                <option value="">— Seç —</option>
+                {employees.map((emp) => (
+                  <option key={emp.SSN} value={emp.SSN}>
+                    {(emp.Fname || emp.fname || "") + " " + (emp.Lname || emp.lname || "")} — {emp.SSN}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
 

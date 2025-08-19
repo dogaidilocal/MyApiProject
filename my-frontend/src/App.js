@@ -13,6 +13,7 @@ import TaskDetails from "./components/TaskDetails";
 import EmployeeList from "./components/EmployeeList";
 import ProjectLeaderList from "./components/ProjectLeaderList";
 import Dashboard from "./pages/Dashboard";
+import CredentialsAdmin from "./pages/CredentialsAdmin";
 
 function getRoleFromToken(token) {
   if (!token) return "";
@@ -109,6 +110,7 @@ export default function App() {
         {/* Çalışanlar & Liderler */}
         <Route path="/employees" element={<EmployeeList />} />
         <Route path="/leaders" element={<ProjectLeaderList />} />
+        <Route path="/admin/credentials" element={isAdmin ? <CredentialsAdmin /> : <Navigate to="/dashboard" replace />} />
 
         {/* Shell içinde bilinmeyen yol -> dashboard */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

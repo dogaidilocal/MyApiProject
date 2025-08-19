@@ -39,6 +39,7 @@ export default function ProjectDetails({ token: propToken, role, project: projec
   const token = propToken || localStorage.getItem("token") || "";
   const isAdmin = useMemo(() => (role || localStorage.getItem("role") || "").toLowerCase() === "admin", [role]);
   const isLeader = useMemo(() => (role || localStorage.getItem("role") || "").toLowerCase() === "leader", [role]);
+  const canManage = isAdmin || isLeader; // Liderler sadece görevler/to-dolar üzerinde işlem yapacak
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -306,7 +307,7 @@ export default function ProjectDetails({ token: propToken, role, project: projec
             Rol: <b>{isAdmin ? "Admin" : "Leader"}</b>
           </span>
         )}
-        {isAdmin && (
+        {canManage && (
           <button onClick={openNew} style={{ marginLeft: "auto" }}>
             ➕ Yeni Görev
           </button>
@@ -487,7 +488,7 @@ export default function ProjectDetails({ token: propToken, role, project: projec
                   )}
                 </div>
 
-                {isAdmin && (
+                {canManage && (
                   <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
                     <button onClick={() => openEdit(t)}>✏️ Düzenle</button>
                     <button onClick={() => deleteTask(t.taskID)} style={{ color: "red" }}>

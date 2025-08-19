@@ -57,6 +57,10 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
   const [newRate, setNewRate] = useState("");
   const [newCount, setNewCount] = useState(1);
 
+  // Rol: admin veya leader to-do/görev yönetebilir
+  const roleName = (localStorage.getItem("role") || "").toLowerCase();
+  const canManage = isAdmin || roleName === "leader";
+
   // task prop’u değişirse state’i güncelle
   useEffect(() => {
     const incomingTodos = (task.Todos ?? task.todos ?? []).map((t, i) => ({
@@ -112,7 +116,7 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
 
   // checkbox
   const handleCheck = (idx) => {
-    if (!isAdmin) return;
+    if (!canManage) return;
     const clone = todos.map((td, i) =>
       i === idx ? { ...td, IsCompleted: !td.IsCompleted } : td
     );
@@ -123,7 +127,7 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
 
   // çalışan seçimi
   const handleAssignmentChange = (todoIndex, j, ssn) => {
-    if (!isAdmin) return;
+    if (!canManage) return;
     setEmployeeSelections((prev) => {
       const copy = prev.map((x) => (x ? [...x] : []));
       if (!copy[todoIndex]) copy[todoIndex] = [];
@@ -134,7 +138,7 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
 
   // yeni To-Do
   const handleAddTodo = () => {
-    if (!isAdmin) return;
+    if (!canManage) return;
     if (!newDesc || !newRate || newCount < 1) {
       return alert("Tüm alanlar dolu olmalı");
     }
@@ -152,6 +156,30 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
     setNewDesc("");
     setNewRate("");
     setNewCount(1);
+  };
+
+  // To-Do düzenle/sil
+  const editTodo = (index) => {
+    if (!canManage) return;
+    const current = todos[index];
+    const desc = window.prompt("Açıklama", current.Description);
+    if (desc == null) return;
+    const rateInput = window.prompt("Önem (%)", String(current.Importance ?? 0));
+    if (rateInput == null) return;
+    const rate = Number(rateInput);
+    const next = todos.map((t, i) => (i === index ? { ...t, Description: desc, Importance: Number.isFinite(rate) ? rate : 0 } : t));
+    setTodos(next);
+    recalculateAndSave(next, employeeSelections);
+  };
+
+  const deleteTodo = (index) => {
+    if (!canManage) return;
+    if (!window.confirm("Bu to-do silinsin mi?")) return;
+    const nextTodos = todos.filter((_, i) => i !== index).map((t, i2) => ({ ...t, TodoIndex: i2 }));
+    const nextAssign = employeeSelections.filter((_, i) => i !== index);
+    setTodos(nextTodos);
+    setEmployeeSelections(nextAssign);
+    recalculateAndSave(nextTodos, nextAssign);
   };
 
   // --- DTO üretimi ---
@@ -190,7 +218,7 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
 
   // kaydet (auto)
   const recalculateAndSave = async (todosData, employeeData) => {
-    if (!isAdmin) return;
+    if (!canManage) return;
 
     const doneSum = (todosData || [])
       .filter((t) => t.IsCompleted)
@@ -229,7 +257,7 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
 
   // manuel Kaydet butonu
   const handleSave = async () => {
-    if (!isAdmin) return;
+    if (!canManage) return;
     try {
       const dto = buildDto();
       const res = await fetch(`${API_URL}/api/Tasks/${norm.id}`, {
@@ -281,14 +309,22 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
       <ul>
         {todos.map((td, i) => (
           <li key={i} style={{ marginBottom: ".5rem" }}>
-            <input
-              type="checkbox"
-              checked={!!td.IsCompleted}
-              disabled={!isAdmin}
-              onChange={() => handleCheck(i)}
-            />{" "}
-            {td.Description} (%{td.Importance ?? 0})
-            {isAdmin && Array.isArray(employeeSelections[i]) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <input
+                type="checkbox"
+                checked={!!td.IsCompleted}
+                disabled={!canManage}
+                onChange={() => handleCheck(i)}
+              />
+              <span>{td.Description} (%{td.Importance ?? 0})</span>
+              {canManage && (
+                <>
+                  <button onClick={() => editTodo(i)}>Düzenle</button>
+                  <button onClick={() => deleteTodo(i)} style={{ color: "red" }}>Sil</button>
+                </>
+              )}
+            </div>
+            {canManage && Array.isArray(employeeSelections[i]) && (
               <div style={{ marginTop: ".5rem", display: "grid", gap: ".25rem" }}>
                 {employeeSelections[i].map((ssn, j) => (
                   <select
@@ -310,7 +346,7 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
         ))}
       </ul>
 
-      {isAdmin && (
+      {canManage && (
         <>
           <div
             style={{
