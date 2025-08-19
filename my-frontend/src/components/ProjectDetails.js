@@ -39,12 +39,38 @@ export default function ProjectDetails({ token: propToken, role, project: projec
   const token = propToken || localStorage.getItem("token") || "";
   const isAdmin = useMemo(() => (role || localStorage.getItem("role") || "").toLowerCase() === "admin", [role]);
   const isLeader = useMemo(() => (role || localStorage.getItem("role") || "").toLowerCase() === "leader", [role]);
-  const canManage = isAdmin || isLeader; // Liderler sadece görevler/to-dolar üzerinde işlem yapacak
-
+  
+  // Get current user's SSN from token
+  const getSSNFromToken = (token) => {
+    if (!token) return "";
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1] || ""));
+      return payload.SSN || "";
+    } catch {
+      return "";
+    }
+  };
+  
+  const currentUserSSN = useMemo(() => getSSNFromToken(token), [token]);
+  
+  // State declarations - must come before useMemo hooks that depend on them
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  
+  // Check if current user is the leader of this specific project
+  const isProjectLeader = useMemo(() => {
+    if (!project || !currentUserSSN) return false;
+    return project.leader && (
+      project.leader.leaderID === currentUserSSN ||
+      project.leader.leaderSSN === currentUserSSN ||
+      project.leader.LeaderID === currentUserSSN ||
+      project.leader.LeaderSSN === currentUserSSN
+    );
+  }, [project, currentUserSSN]);
+  
+  const canManage = isAdmin || (isLeader && isProjectLeader); // Leaders can only manage their assigned projects
 
   // form
   const [showForm, setShowForm] = useState(false);
@@ -304,7 +330,7 @@ export default function ProjectDetails({ token: propToken, role, project: projec
         {Number.isFinite(depNum) && <Link to={`/departments/${depNum}`}>← Bölüme dön</Link>}
         {(isAdmin || isLeader) && (
           <span style={{ marginLeft: "auto", color: "#666" }}>
-            Rol: <b>{isAdmin ? "Admin" : "Leader"}</b>
+            Rol: <b>{isAdmin ? "Admin" : (isProjectLeader ? "Proje Lideri" : "Leader")}</b>
           </span>
         )}
         {canManage && (
@@ -415,6 +441,7 @@ export default function ProjectDetails({ token: propToken, role, project: projec
           <TaskDetails
             task={selectedTask}
             isAdmin={isAdmin}
+            isProjectLeader={isProjectLeader}
             token={token}
             onUpdate={handleTaskUpdated}
           />

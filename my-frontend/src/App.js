@@ -29,6 +29,16 @@ function getRoleFromToken(token) {
   }
 }
 
+function getSSNFromToken(token) {
+  if (!token) return "";
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1] || ""));
+    return payload.SSN || "";
+  } catch {
+    return "";
+  }
+}
+
 function Protected({ token, children }) {
   return token ? children : <Navigate to="/login" replace />;
 }

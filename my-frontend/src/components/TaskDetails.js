@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-function TaskDetails({ task, isAdmin, token, onUpdate }) {
+function TaskDetails({ task, isAdmin, isProjectLeader, token, onUpdate }) {
   // ---- API URL (env + fallback) ----
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -57,9 +57,9 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
   const [newRate, setNewRate] = useState("");
   const [newCount, setNewCount] = useState(1);
 
-  // Rol: admin veya leader to-do/görev yönetebilir
+  // Rol: admin veya proje lideri to-do/görev yönetebilir
   const roleName = (localStorage.getItem("role") || "").toLowerCase();
-  const canManage = isAdmin || roleName === "leader";
+  const canManage = isAdmin || (roleName === "leader" && isProjectLeader);
 
   // task prop’u değişirse state’i güncelle
   useEffect(() => {
@@ -113,6 +113,20 @@ function TaskDetails({ task, isAdmin, token, onUpdate }) {
     );
     return totalSum ? Math.round((doneSum / totalSum) * 100) : 0;
   }, [todos]);
+
+  // Çalışan atamaları değiştiğinde otomatik kaydet
+  useEffect(() => {
+    if (employeeSelections.length > 0 && canManage) {
+      const hasAssignments = employeeSelections.some(arr => arr && arr.some(ssn => ssn && ssn.trim() !== ""));
+      if (hasAssignments) {
+        // Debounce to avoid too many saves
+        const timeoutId = setTimeout(() => {
+          recalculateAndSave(todos, employeeSelections);
+        }, 500);
+        return () => clearTimeout(timeoutId);
+      }
+    }
+  }, [employeeSelections, canManage]);
 
   // checkbox
   const handleCheck = (idx) => {

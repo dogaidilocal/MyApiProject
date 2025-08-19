@@ -10,7 +10,7 @@ export default function ProjectLeaderList() {
   const [q, setQ] = useState("");
 
   // --- Güvenli alan okuyucular ---
-  const getSSN = (l) => l.LeaderSSN || l.leaderSSN || l.id || l.leaderId || "";
+  const getSSN = (l) => l.LeaderID || l.LeaderSSN || l.leaderID || l.leaderSSN || l.id || l.leaderId || "";
   const getFullName = (l) => {
     if (l.FullName) return l.FullName;
     if (l.fullName) return l.fullName;

@@ -38,12 +38,37 @@ namespace MyApiProject.Controllers
             if (user.PasswordHash != request.Password)
                 return Unauthorized("Invalid password");
 
+            // Kullanıcının SSN'ini bul
+            string? userSSN = null;
+            string Normalize(string? s) => (s ?? string.Empty).Trim().ToLower();
+            var employees = await _context.Employees.ToListAsync();
+            var matchingEmployee = employees.FirstOrDefault(e =>
+            {
+                var fname = Normalize(e.Fname);
+                var lname = Normalize(e.Lname);
+                var fullName = Normalize($"{e.Fname}{e.Lname}");
+                var fullNameWithDot = Normalize($"{e.Fname}.{e.Lname}");
+                var username = Normalize(user.Username);
+                
+                return username == fname ||
+                       username == lname ||
+                       username == fullName ||
+                       username == fullNameWithDot ||
+                       username == ($"{fname}.{lname}") ||
+                       username == ($"{fname}{lname}");
+            });
+            
+            if (matchingEmployee != null)
+            {
+                userSSN = matchingEmployee.SSN;
+            }
+
             // Benzersiz kimlik ve issued at claim'leri
             var claims = new[]
             {
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Role, user.Role.ToLower())
-,
+                new Claim(ClaimTypes.Role, user.Role.ToLower()),
+                new Claim("SSN", userSSN ?? ""),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
             };

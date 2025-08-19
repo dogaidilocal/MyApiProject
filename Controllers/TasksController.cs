@@ -175,15 +175,11 @@ namespace MyApiProject.Controllers
             existing.Task_number = dto.Task_number;
             existing.Pnumber = dto.Pnumber;
 
-            // 1) mevcutları sil → kaydet
+            // 1) mevcut to-do'ları ve atamaları sil
             _context.TaskTodos.RemoveRange(existing.Todos);
             _context.AssignedTos.RemoveRange(existing.AssignedEmployees);
-            await _context.SaveChangesAsync();
 
-            // 2) tracking’i temizle (already being tracked hatasını önler)
-            _context.ChangeTracker.Clear();
-
-            // 3) to-do’ları yeniden ekle
+            // 2) to-do'ları yeniden ekle
             if (dto.Todos != null)
             {
                 var toAddTodos = dto.Todos.Select(td => new TaskTodo
@@ -197,7 +193,7 @@ namespace MyApiProject.Controllers
                 await _context.TaskTodos.AddRangeAsync(toAddTodos);
             }
 
-            // 4) atamaları yeniden ekle
+            // 3) atamaları yeniden ekle
             if (dto.Assignments != null)
             {
                 for (int i = 0; i < dto.Assignments.Count; i++)
@@ -217,9 +213,7 @@ namespace MyApiProject.Controllers
                 }
             }
 
-            // 5) task’ı modified işaretleyip kaydet
-            _context.Entry(existing).State = EntityState.Modified;
-
+            // 4) tüm değişiklikleri kaydet
             await _context.SaveChangesAsync();
 
             return Ok(dto);

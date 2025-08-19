@@ -115,15 +115,22 @@ namespace MyApiProject.Controllers
                 string Normalize(string? s) => (s ?? string.Empty).Trim().ToLower();
                 var f = Normalize(employee.Fname);
                 var l = Normalize(employee.Lname);
+                var fullName = Normalize($"{employee.Fname}{employee.Lname}");
+                var fullNameWithDot = Normalize($"{employee.Fname}.{employee.Lname}");
                 
                 var allUsers = await _context.Users.ToListAsync();
                 var matchingUser = allUsers.FirstOrDefault(u =>
                 {
                     var un = Normalize(u.Username);
                     return un == f ||
+                           un == l ||
+                           un == fullName ||
+                           un == fullNameWithDot ||
                            un == ($"{f}.{l}") ||
                            un == ($"{f}{l}");
                 });
+
+
                 
                 if (matchingUser != null && !string.Equals(matchingUser.Role, "Leader", StringComparison.OrdinalIgnoreCase))
                 {

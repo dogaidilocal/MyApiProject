@@ -191,8 +191,9 @@ export default function DepartmentDetails({ token, role }) {
 
       // Lider seçilmişse ata (yalnızca admin için uç zaten kısıtlı)
       if (isAdmin && leaderSSN) {
+        console.log(`Lider atama deneniyor: SSN=${leaderSSN}, Proje=${body.pnumber}`);
         try {
-          await fetch(`${API_URL}/api/ProjectLeaders/project/${body.pnumber}/assign`, {
+          const leaderRes = await fetch(`${API_URL}/api/ProjectLeaders/project/${body.pnumber}/assign`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -200,9 +201,18 @@ export default function DepartmentDetails({ token, role }) {
             },
             body: JSON.stringify({ LeaderSSN: leaderSSN, UsernameForUserTable: null }),
           });
+          console.log(`Lider atama sonucu: ${leaderRes.status}`);
+          if (!leaderRes.ok) {
+            const errorText = await leaderRes.text();
+            console.error(`Lider atama hatası: ${errorText}`);
+          } else {
+            console.log("Lider atama başarılı!");
+          }
         } catch (e) {
           console.error("Lider atama hatası:", e);
         }
+      } else {
+        console.log(`Lider atama yapılmadı: isAdmin=${isAdmin}, leaderSSN=${leaderSSN}`);
       }
 
       closeForm();
