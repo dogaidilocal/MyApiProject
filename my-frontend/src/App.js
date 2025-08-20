@@ -19,12 +19,17 @@ function getRoleFromToken(token) {
   if (!token) return "";
   try {
     const payload = JSON.parse(atob(token.split(".")[1] || ""));
-    const dotnetRole =
-      payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
-    const role = payload.role || dotnetRole || payload.roles;
+    
+    // Try multiple possible role claim names
+    const role = payload.role || 
+                 payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
+                 payload.roles ||
+                 payload.Role;
+    
     if (Array.isArray(role)) return role[0] || "";
-    return role || "";
-  } catch {
+    return (role || "").toLowerCase();
+  } catch (error) {
+    console.error("Error parsing JWT token:", error);
     return "";
   }
 }

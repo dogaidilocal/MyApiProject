@@ -143,6 +143,30 @@ namespace MyApiProject.Controllers
             var users = await _context.Users.ToListAsync();
             return Ok(users.Select(u => new { u.Username, u.Role }));
         }
+
+        // Debug endpoint: Create admin user if not exists
+        [HttpPost("create-admin")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CreateAdminUser()
+        {
+            var existingAdmin = await _context.Users.FirstOrDefaultAsync(u => u.Role.ToLower() == "admin");
+            if (existingAdmin != null)
+            {
+                return Ok(new { message = "Admin user already exists", username = existingAdmin.Username });
+            }
+
+            var adminUser = new User
+            {
+                Username = "admin",
+                PasswordHash = "admin123",
+                Role = "admin"
+            };
+
+            _context.Users.Add(adminUser);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Admin user created", username = adminUser.Username, password = adminUser.PasswordHash });
+        }
     }
 
     public class UpdateUserRequest

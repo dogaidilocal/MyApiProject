@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using MyApiProject.Data;
+using MyApiProject.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -114,5 +115,28 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Seed database with admin user if not exists
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var adminUser = await context.Users.FirstOrDefaultAsync(u => u.Role.ToLower() == "admin");
+    if (adminUser == null)
+    {
+        var newAdmin = new MyApiProject.Models.User
+        {
+            Username = "admin",
+            PasswordHash = "admin123",
+            Role = "admin"
+        };
+        context.Users.Add(newAdmin);
+        await context.SaveChangesAsync();
+        Console.WriteLine("Admin user created: admin/admin123");
+    }
+    else
+    {
+        Console.WriteLine($"Admin user already exists: {adminUser.Username}");
+    }
+}
 
 app.Run();

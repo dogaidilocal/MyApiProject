@@ -19,41 +19,23 @@ export default function CredentialsAdmin() {
   useEffect(() => {
     const token = localStorage.getItem("token");
     const role = (localStorage.getItem("role") || "").toLowerCase();
-    console.log("Current role:", role, "Token:", token ? "exists" : "missing");
     
     if (role !== "admin") {
-      setErr("Bu sayfa sadece adminler içindir.");
+      setErr("Bu sayfa sadece adminler içindir. Mevcut rol: " + role);
       return;
     }
     
     const load = async () => {
       setLoading(true); setErr("");
       try {
-        // Debug: Check user info first
-        const debugRes = await fetch(`${API_URL}/api/Users/debug-user`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        if (debugRes.ok) {
-          const debugData = await debugRes.json();
-          console.log("Debug user info:", debugData);
-        }
-
-        // Debug: Check all users
-        const debugAllRes = await fetch(`${API_URL}/api/Users/debug-all-users`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        if (debugAllRes.ok) {
-          const debugAllData = await debugAllRes.json();
-          console.log("Debug all users:", debugAllData);
-        }
-        
         const res = await fetch(`${API_URL}/api/Users`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
+        
         if (!res.ok) {
           const errorText = await res.text();
           console.error("Users fetch failed:", res.status, errorText);
-          throw new Error(errorText);
+          throw new Error(`HTTP ${res.status}: ${errorText}`);
         }
         const data = await res.json();
         setUsers(Array.isArray(data) ? data : []);
