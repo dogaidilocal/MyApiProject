@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 function AssignmentLogList() {
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");

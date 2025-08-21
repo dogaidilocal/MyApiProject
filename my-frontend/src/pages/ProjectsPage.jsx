@@ -4,7 +4,7 @@ import ProjectList from "../components/ProjectList";
 import ProjectDetails from "../components/ProjectDetails";
 import SidebarWidgets from "../components/SidebarWidgets";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
 function normalizeProject(raw) {
   if (!raw) return null;

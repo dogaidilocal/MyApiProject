@@ -1,3 +1,4 @@
+
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MyApiProject.Data;
@@ -76,5 +77,3 @@ namespace MyApiProject.Controllers
         }
     }
 }
-
-

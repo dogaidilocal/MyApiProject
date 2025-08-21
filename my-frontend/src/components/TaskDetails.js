@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 function TaskDetails({ task, isAdmin, isProjectLeader, token, onUpdate }) {
   // ---- API URL (env + fallback) ----
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
   // ---- helpers: task alanlarını normalize et ----
   const norm = {

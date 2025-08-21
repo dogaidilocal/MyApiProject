@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 function ProjectList({ projects, onSelect, isAdmin, onAdd }) {
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({

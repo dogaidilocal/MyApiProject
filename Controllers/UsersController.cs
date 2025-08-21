@@ -176,5 +176,3 @@ namespace MyApiProject.Controllers
         public string? Role { get; set; }
     }
 }
-
-

@@ -11,4 +11,3 @@ namespace MyApiProject.Models
         public string Dname { get; set; }
     }
 }
-

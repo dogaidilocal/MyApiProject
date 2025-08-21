@@ -3,7 +3,7 @@ import React from "react";
 import { Outlet } from "react-router-dom";
 import SidebarNav from "../components/SidebarNav";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
 export default function AppShell({ onLogout }) {
   return (

@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 export default function ProjectLeaderList() {
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
   const [leaders, setLeaders] = useState([]);
   const [loading, setLoading] = useState(false);

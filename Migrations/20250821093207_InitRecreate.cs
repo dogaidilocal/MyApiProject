@@ -7,24 +7,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MyApiProject.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialBaseline : Migration
+    public partial class InitRecreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "Assigned_To",
-                columns: table => new
-                {
-                    SSN = table.Column<string>(type: "text", nullable: false),
-                    TaskID = table.Column<int>(type: "integer", nullable: false),
-                    Assigned_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Assigned_To", x => new { x.SSN, x.TaskID });
-                });
-
             migrationBuilder.CreateTable(
                 name: "Department",
                 columns: table => new
@@ -36,24 +23,6 @@ namespace MyApiProject.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Department", x => x.Dnumber);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Task",
-                columns: table => new
-                {
-                    TaskID = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    TaskName = table.Column<string>(type: "text", nullable: false),
-                    Start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Due_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Completion_rate = table.Column<int>(type: "integer", nullable: true),
-                    Task_number = table.Column<int>(type: "integer", nullable: true),
-                    Pnumber = table.Column<int>(type: "integer", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Task", x => x.TaskID);
                 });
 
             migrationBuilder.CreateTable(
@@ -101,33 +70,126 @@ namespace MyApiProject.Migrations
                     Start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     Due_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     Completion_status = table.Column<int>(type: "integer", nullable: true),
-                    Dnumber = table.Column<int>(type: "integer", nullable: false),
-                    DepartmentDnumber = table.Column<int>(type: "integer", nullable: true)
+                    Dnumber = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Project", x => x.Pnumber);
                     table.ForeignKey(
-                        name: "FK_Project_Department_DepartmentDnumber",
-                        column: x => x.DepartmentDnumber,
+                        name: "FK_Project_Department_Dnumber",
+                        column: x => x.Dnumber,
                         principalTable: "Department",
-                        principalColumn: "Dnumber");
+                        principalColumn: "Dnumber",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "Task_Completion_Log",
+                name: "Project_Leader",
                 columns: table => new
                 {
-                    LogID = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    TaskID = table.Column<int>(type: "integer", nullable: false),
-                    CompletionDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    LeaderSSN = table.Column<string>(type: "character varying(9)", maxLength: 9, nullable: false),
+                    Pnumber = table.Column<int>(type: "integer", nullable: false),
+                    Dnumber = table.Column<int>(type: "integer", nullable: false),
+                    Start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Task_Completion_Log", x => x.LogID);
+                    table.PrimaryKey("PK_Project_Leader", x => x.LeaderSSN);
                     table.ForeignKey(
-                        name: "FK_Task_Completion_Log_Task_TaskID",
+                        name: "FK_Project_Leader_Department_Dnumber",
+                        column: x => x.Dnumber,
+                        principalTable: "Department",
+                        principalColumn: "Dnumber",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Project_Leader_Employee_LeaderSSN",
+                        column: x => x.LeaderSSN,
+                        principalTable: "Employee",
+                        principalColumn: "SSN",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Project_Leader_Project_Pnumber",
+                        column: x => x.Pnumber,
+                        principalTable: "Project",
+                        principalColumn: "Pnumber",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Task",
+                columns: table => new
+                {
+                    TaskID = table.Column<int>(type: "integer", nullable: false),
+                    TaskName = table.Column<string>(type: "text", nullable: false),
+                    Start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    Due_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    Completion_rate = table.Column<int>(type: "integer", nullable: true),
+                    Task_number = table.Column<int>(type: "integer", nullable: true),
+                    Pnumber = table.Column<int>(type: "integer", nullable: true),
+                    Dnumber = table.Column<int>(type: "integer", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Task", x => x.TaskID);
+                    table.ForeignKey(
+                        name: "FK_Task_Department_Dnumber",
+                        column: x => x.Dnumber,
+                        principalTable: "Department",
+                        principalColumn: "Dnumber");
+                    table.ForeignKey(
+                        name: "FK_Task_Project_Pnumber",
+                        column: x => x.Pnumber,
+                        principalTable: "Project",
+                        principalColumn: "Pnumber",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Works_On",
+                columns: table => new
+                {
+                    SSN = table.Column<string>(type: "character varying(9)", nullable: false),
+                    Pnumber = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Works_On", x => new { x.SSN, x.Pnumber });
+                    table.ForeignKey(
+                        name: "FK_Works_On_Employee_SSN",
+                        column: x => x.SSN,
+                        principalTable: "Employee",
+                        principalColumn: "SSN",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Works_On_Project_Pnumber",
+                        column: x => x.Pnumber,
+                        principalTable: "Project",
+                        principalColumn: "Pnumber",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Assigned_To",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    SSN = table.Column<string>(type: "character varying(9)", nullable: false),
+                    TaskID = table.Column<int>(type: "integer", nullable: false),
+                    TodoIndex = table.Column<int>(type: "integer", nullable: false),
+                    Assigned_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Assigned_To", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Assigned_To_Employee_SSN",
+                        column: x => x.SSN,
+                        principalTable: "Employee",
+                        principalColumn: "SSN",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Assigned_To_Task_TaskID",
                         column: x => x.TaskID,
                         principalTable: "Task",
                         principalColumn: "TaskID",
@@ -162,63 +224,55 @@ namespace MyApiProject.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Project_Leader",
+                name: "Task_Completion_Log",
                 columns: table => new
                 {
-                    LeaderID = table.Column<string>(type: "character varying(9)", maxLength: 9, nullable: false),
-                    Pnumber = table.Column<int>(type: "integer", nullable: false),
-                    Dnumber = table.Column<int>(type: "integer", nullable: false),
-                    Start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    EmployeeSSN = table.Column<string>(type: "character varying(9)", nullable: true),
-                    ProjectPnumber = table.Column<int>(type: "integer", nullable: false),
-                    DepartmentDnumber = table.Column<int>(type: "integer", nullable: false)
+                    LogID = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    TaskID = table.Column<int>(type: "integer", nullable: false),
+                    CompletionDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Project_Leader", x => x.LeaderID);
+                    table.PrimaryKey("PK_Task_Completion_Log", x => x.LogID);
                     table.ForeignKey(
-                        name: "FK_Project_Leader_Department_DepartmentDnumber",
-                        column: x => x.DepartmentDnumber,
-                        principalTable: "Department",
-                        principalColumn: "Dnumber",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_Project_Leader_Employee_EmployeeSSN",
-                        column: x => x.EmployeeSSN,
-                        principalTable: "Employee",
-                        principalColumn: "SSN");
-                    table.ForeignKey(
-                        name: "FK_Project_Leader_Project_ProjectPnumber",
-                        column: x => x.ProjectPnumber,
-                        principalTable: "Project",
-                        principalColumn: "Pnumber",
+                        name: "FK_Task_Completion_Log_Task_TaskID",
+                        column: x => x.TaskID,
+                        principalTable: "Task",
+                        principalColumn: "TaskID",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "Works_On",
+                name: "Task_Todo",
                 columns: table => new
                 {
-                    SSN = table.Column<string>(type: "text", nullable: false),
-                    Pnumber = table.Column<int>(type: "integer", nullable: false),
-                    EmployeeSSN = table.Column<string>(type: "character varying(9)", nullable: true),
-                    ProjectPnumber = table.Column<int>(type: "integer", nullable: false)
+                    TaskID = table.Column<int>(type: "integer", nullable: false),
+                    TodoIndex = table.Column<int>(type: "integer", nullable: false),
+                    Description = table.Column<string>(type: "text", nullable: true),
+                    Importance = table.Column<int>(type: "integer", nullable: true),
+                    IsCompleted = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Works_On", x => new { x.SSN, x.Pnumber });
+                    table.PrimaryKey("PK_Task_Todo", x => new { x.TaskID, x.TodoIndex });
                     table.ForeignKey(
-                        name: "FK_Works_On_Employee_EmployeeSSN",
-                        column: x => x.EmployeeSSN,
-                        principalTable: "Employee",
-                        principalColumn: "SSN");
-                    table.ForeignKey(
-                        name: "FK_Works_On_Project_ProjectPnumber",
-                        column: x => x.ProjectPnumber,
-                        principalTable: "Project",
-                        principalColumn: "Pnumber",
+                        name: "FK_Task_Todo_Task_TaskID",
+                        column: x => x.TaskID,
+                        principalTable: "Task",
+                        principalColumn: "TaskID",
                         onDelete: ReferentialAction.Cascade);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Assigned_To_SSN",
+                table: "Assigned_To",
+                column: "SSN");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Assigned_To_TaskID",
+                table: "Assigned_To",
+                column: "TaskID");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Assignment_Log_SSN",
@@ -236,24 +290,29 @@ namespace MyApiProject.Migrations
                 column: "Dno");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Project_DepartmentDnumber",
+                name: "IX_Project_Dnumber",
                 table: "Project",
-                column: "DepartmentDnumber");
+                column: "Dnumber");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Project_Leader_DepartmentDnumber",
+                name: "IX_Project_Leader_Dnumber",
                 table: "Project_Leader",
-                column: "DepartmentDnumber");
+                column: "Dnumber");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Project_Leader_EmployeeSSN",
+                name: "IX_Project_Leader_Pnumber",
                 table: "Project_Leader",
-                column: "EmployeeSSN");
+                column: "Pnumber");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Project_Leader_ProjectPnumber",
-                table: "Project_Leader",
-                column: "ProjectPnumber");
+                name: "IX_Task_Dnumber",
+                table: "Task",
+                column: "Dnumber");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Task_Pnumber",
+                table: "Task",
+                column: "Pnumber");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Task_Completion_Log_TaskID",
@@ -261,14 +320,9 @@ namespace MyApiProject.Migrations
                 column: "TaskID");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Works_On_EmployeeSSN",
+                name: "IX_Works_On_Pnumber",
                 table: "Works_On",
-                column: "EmployeeSSN");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Works_On_ProjectPnumber",
-                table: "Works_On",
-                column: "ProjectPnumber");
+                column: "Pnumber");
         }
 
         /// <inheritdoc />
@@ -285,6 +339,9 @@ namespace MyApiProject.Migrations
 
             migrationBuilder.DropTable(
                 name: "Task_Completion_Log");
+
+            migrationBuilder.DropTable(
+                name: "Task_Todo");
 
             migrationBuilder.DropTable(
                 name: "users");

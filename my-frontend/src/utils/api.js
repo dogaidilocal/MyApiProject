@@ -1,4 +1,4 @@
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
 async function core(path, { method = "GET", body, headers } = {}) {
   const token = localStorage.getItem("token");

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 
 function EmployeeList() {
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
 
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading]   = useState(false);

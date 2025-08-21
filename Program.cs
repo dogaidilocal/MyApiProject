@@ -80,7 +80,9 @@ var allowedOrigins = new[]
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://localhost:3000",
-    "https://127.0.0.1:3000"
+    "https://127.0.0.1:3000",
+    "http://localhost:5001",
+    "http://127.0.0.1:5001"
     // ihtiyacın varsa yerel ağ IP'n ekle
 };
 builder.Services.AddCors(opt =>
@@ -96,6 +98,10 @@ builder.Services.AddCors(opt =>
 });
 
 var app = builder.Build();
+
+// Set default port to 5001
+app.Urls.Clear();
+app.Urls.Add("http://localhost:5001");
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 AppContext.SetSwitch("Npgsql.DisableDateTimeInfinityConversions", true);
@@ -120,6 +126,7 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await context.Database.MigrateAsync();
     var adminUser = await context.Users.FirstOrDefaultAsync(u => u.Role.ToLower() == "admin");
     if (adminUser == null)
     {

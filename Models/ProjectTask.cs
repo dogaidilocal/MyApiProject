@@ -22,9 +22,13 @@ namespace MyApiProject.Models
 
         public int? Task_number { get; set; }
         public int? Pnumber { get; set; }
+        public int? Dnumber { get; set; } // Department number
 
         [ForeignKey("Pnumber")]
         public Project? Project { get; set; }
+        
+        [ForeignKey("Dnumber")]
+        public Department? Department { get; set; }
 
         public ICollection<AssignedTo> AssignedEmployees { get; set; } = new List<AssignedTo>();
 

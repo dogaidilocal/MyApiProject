@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-
+namespace MyApiProject.Models;
 [Table("users")]
 public class User
 {

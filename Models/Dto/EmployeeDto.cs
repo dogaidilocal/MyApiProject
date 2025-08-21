@@ -20,5 +20,3 @@ namespace MyApiProject.Models.Dto
         public string Password { get; set; } = string.Empty; // üretilen ya da verilen şifre
     }
 }
-
-

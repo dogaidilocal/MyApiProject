@@ -40,7 +40,7 @@ export default function Layout({ children }) {
         <div style={{ fontWeight: 700 }}>🧭 Project Portal</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ opacity: 0.7, fontSize: 12 }}>
-            API: {process.env.REACT_APP_API_URL || "http://localhost:5000"}
+            API: {process.env.REACT_APP_API_URL || "http://localhost:5001"}
           </span>
           {token && (
             <button

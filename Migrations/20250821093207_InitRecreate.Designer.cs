@@ -12,35 +12,47 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MyApiProject.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250718090912_FixKeys")]
-    partial class FixKeys
+    [Migration("20250821093207_InitRecreate")]
+    partial class InitRecreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.6")
+                .HasAnnotation("ProductVersion", "9.0.7")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("MyApiProject.Models.AssignedTo", b =>
                 {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("Assigned_date")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("SSN")
+                        .IsRequired()
                         .HasColumnType("character varying(9)");
 
                     b.Property<int>("TaskID")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("Assigned_date")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<int>("TodoIndex")
+                        .HasColumnType("integer");
 
-                    b.HasKey("SSN", "TaskID");
+                    b.HasKey("Id");
+
+                    b.HasIndex("SSN");
 
                     b.HasIndex("TaskID");
 
-                    b.ToTable("Assigned_To");
+                    b.ToTable("Assigned_To", (string)null);
                 });
 
             modelBuilder.Entity("MyApiProject.Models.AssignmentLog", b =>
@@ -146,7 +158,8 @@ namespace MyApiProject.Migrations
                 {
                     b.Property<string>("LeaderID")
                         .HasMaxLength(9)
-                        .HasColumnType("character varying(9)");
+                        .HasColumnType("character varying(9)")
+                        .HasColumnName("LeaderSSN");
 
                     b.Property<int>("Dnumber")
                         .HasColumnType("integer");
@@ -163,20 +176,20 @@ namespace MyApiProject.Migrations
 
                     b.HasIndex("Pnumber");
 
-                    b.ToTable("Project_Leader");
+                    b.ToTable("Project_Leader", (string)null);
                 });
 
-            modelBuilder.Entity("MyApiProject.Models.Task", b =>
+            modelBuilder.Entity("MyApiProject.Models.ProjectTask", b =>
                 {
                     b.Property<int>("TaskID")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("TaskID"));
 
                     b.Property<int?>("Completion_rate")
                         .HasColumnType("integer")
                         .HasColumnName("Completion_rate");
+
+                    b.Property<int?>("Dnumber")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("Due_date")
                         .HasColumnType("timestamp with time zone");
@@ -196,7 +209,11 @@ namespace MyApiProject.Migrations
 
                     b.HasKey("TaskID");
 
-                    b.ToTable("Task");
+                    b.HasIndex("Dnumber");
+
+                    b.HasIndex("Pnumber");
+
+                    b.ToTable("Task", (string)null);
                 });
 
             modelBuilder.Entity("MyApiProject.Models.TaskCompletionLog", b =>
@@ -220,24 +237,29 @@ namespace MyApiProject.Migrations
                     b.ToTable("Task_Completion_Log");
                 });
 
-            modelBuilder.Entity("MyApiProject.Models.WorksOn", b =>
+            modelBuilder.Entity("MyApiProject.Models.TaskTodo", b =>
                 {
-                    b.Property<string>("SSN")
-                        .HasColumnType("character varying(9)")
-                        .HasColumnName("SSN");
+                    b.Property<int>("TaskID")
+                        .HasColumnType("integer");
 
-                    b.Property<int>("Pnumber")
-                        .HasColumnType("integer")
-                        .HasColumnName("Pnumber");
+                    b.Property<int>("TodoIndex")
+                        .HasColumnType("integer");
 
-                    b.HasKey("SSN", "Pnumber");
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
 
-                    b.HasIndex("Pnumber");
+                    b.Property<int?>("Importance")
+                        .HasColumnType("integer");
 
-                    b.ToTable("Works_On");
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("TaskID", "TodoIndex");
+
+                    b.ToTable("Task_Todo", (string)null);
                 });
 
-            modelBuilder.Entity("User", b =>
+            modelBuilder.Entity("MyApiProject.Models.User", b =>
                 {
                     b.Property<int>("UserId")
                         .ValueGeneratedOnAdd()
@@ -262,6 +284,23 @@ namespace MyApiProject.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("MyApiProject.Models.WorksOn", b =>
+                {
+                    b.Property<string>("SSN")
+                        .HasColumnType("character varying(9)")
+                        .HasColumnName("SSN");
+
+                    b.Property<int>("Pnumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("Pnumber");
+
+                    b.HasKey("SSN", "Pnumber");
+
+                    b.HasIndex("Pnumber");
+
+                    b.ToTable("Works_On");
+                });
+
             modelBuilder.Entity("MyApiProject.Models.AssignedTo", b =>
                 {
                     b.HasOne("MyApiProject.Models.Employee", "Employee")
@@ -270,7 +309,7 @@ namespace MyApiProject.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MyApiProject.Models.Task", "Task")
+                    b.HasOne("MyApiProject.Models.ProjectTask", "Task")
                         .WithMany("AssignedEmployees")
                         .HasForeignKey("TaskID")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -289,7 +328,7 @@ namespace MyApiProject.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MyApiProject.Models.Task", "Task")
+                    b.HasOne("MyApiProject.Models.ProjectTask", "Task")
                         .WithMany()
                         .HasForeignKey("TaskID")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -330,11 +369,35 @@ namespace MyApiProject.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MyApiProject.Models.Project", "Project")
+                    b.HasOne("MyApiProject.Models.Employee", "Employee")
                         .WithMany()
+                        .HasForeignKey("LeaderID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MyApiProject.Models.Project", "Project")
+                        .WithMany("ProjectLeaders")
                         .HasForeignKey("Pnumber")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("MyApiProject.Models.ProjectTask", b =>
+                {
+                    b.HasOne("MyApiProject.Models.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("Dnumber");
+
+                    b.HasOne("MyApiProject.Models.Project", "Project")
+                        .WithMany("Tasks")
+                        .HasForeignKey("Pnumber")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Department");
 
@@ -343,8 +406,19 @@ namespace MyApiProject.Migrations
 
             modelBuilder.Entity("MyApiProject.Models.TaskCompletionLog", b =>
                 {
-                    b.HasOne("MyApiProject.Models.Task", "Task")
+                    b.HasOne("MyApiProject.Models.ProjectTask", "Task")
                         .WithMany()
+                        .HasForeignKey("TaskID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("MyApiProject.Models.TaskTodo", b =>
+                {
+                    b.HasOne("MyApiProject.Models.ProjectTask", "Task")
+                        .WithMany("Todos")
                         .HasForeignKey("TaskID")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -376,9 +450,18 @@ namespace MyApiProject.Migrations
                     b.Navigation("AssignedTasks");
                 });
 
-            modelBuilder.Entity("MyApiProject.Models.Task", b =>
+            modelBuilder.Entity("MyApiProject.Models.Project", b =>
+                {
+                    b.Navigation("ProjectLeaders");
+
+                    b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("MyApiProject.Models.ProjectTask", b =>
                 {
                     b.Navigation("AssignedEmployees");
+
+                    b.Navigation("Todos");
                 });
 #pragma warning restore 612, 618
         }
